@@ -1,0 +1,575 @@
+---
+title: "Cortex mixed ANOVA February 24"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+  pdf_document: default
+  word_document: default
+---
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(xlsx)
+library(ggplot2)
+library(pheatmap)
+library(mixtools)
+library(mclust)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(lmerTest)
+library(lme4)
+library(RColorBrewer)
+library(nlme)
+library(multcomp)
+library(MASS)
+library(lattice)
+library(EMAtools)
+library(sjstats)
+library(performance)
+library(insight)
+```
+
+```{r - data, include=FALSE}
+## Reading cortex data
+cortex<-read.csv("./cortex_cells_ready.csv",stringsAsFactors = F)
+## Rmoving  plants with problematic quantification
+cortex<-cortex[!cortex$plantID=="X20171217__col.0.1.nM.BL_A",]
+cortex<-cortex[!cortex$plantID=="Col_20170717",]
+cortex<-cortex[!cortex$plantID=="Bri1_20170802_07",]
+cortex<-cortex[!cortex$plantID=="Bri1_20170817",]
+# Changing plant ID for consistency with other IDs
+cortex$plantID[cortex$plantID=="X20171217__col.0.1.nM.BL_B"]<-"Col_BL20171217__col.0.1.nM.BL_B"
+
+cortex_ColBL1<-read.xlsx("./col_BL_1_updated_20200423.xlsx",sheetName = "Cortex",stringsAsFactors = F)
+cortex_ColBL1<-cortex_ColBL1[,c(1:7,9,8)]
+cortex_ColBL2<-read.xlsx("./col_BL_2_updated_20200423.xlsx",sheetName = "Cortex",stringsAsFactors = F)
+cortex_ColBL2<-cortex_ColBL2[,c(1:7,9,8)]
+#
+
+#Adding Cell ID (X column) correcting colmn order and names
+cortex_ColBL1$X<-paste(cortex_ColBL1$plant.ID,cortex_ColBL1$Cell.ID,sep = "_")
+cortex_ColBL1$PlantType<-"colBL"
+cortex_ColBL1<-cortex_ColBL1[,c(10,11,2,3,4,5,6,7,9,8)]
+colnames(cortex_ColBL1)<-colnames(cortex)
+
+cortex_ColBL2$X<-paste(cortex_ColBL2$plant.ID,cortex_ColBL2$Cell.ID,sep = "_")
+cortex_ColBL2$PlantType<-"colBL"
+cortex_ColBL2<-cortex_ColBL2[,c(10,11,2,3,4,5,6,7,9,8)]
+colnames(cortex_ColBL2)<-colnames(cortex)
+
+cortex_col_20191029_03<-read.xlsx("./col_20191029_03_new.xlsx",sheetName = "Cortex",stringsAsFactors = F)
+cortex_col_20191029_03$X<-paste(cortex_col_20191029_03$plant.ID,cortex_col_20191029_03$Cell.ID,sep = "_")
+cortex_col_20191029_03$PlantType<-"col"
+cortex_col_20191029_03<-cortex_col_20191029_03[,c(10,11,2:7,8,9)]
+colnames(cortex_col_20191029_03)<-colnames(cortex)
+
+cortex_bri1_20170328_02<-read.xlsx("./bri1_20170328_02_updated.xlsx",sheetName = "Cortex",stringsAsFactors = F)
+cortex_bri1_20170328_02<-cortex_bri1_20170328_02[,1:9]
+cortex_bri1_20170328_02$X<-paste(cortex_bri1_20170328_02$plant.ID,cortex_bri1_20170328_02$Cell.ID,sep = "_")
+cortex_bri1_20170328_02$PlantType<-"bri"
+cortex_bri1_20170328_02<-cortex_bri1_20170328_02[,c(10,11,2:7,8,9)]
+colnames(cortex_bri1_20170328_02)<-colnames(cortex)
+
+
+cortex1<-rbind(cortex,cortex_ColBL1,cortex_ColBL2,cortex_col_20191029_03,cortex_bri1_20170328_02)
+cortex1<-cortex1[is.finite(cortex1$length),]
+cortex_cells_ready2hm<-cortex1
+cortex_cells_ready2hm[,c(6,7,8,9,10)]<-log2(cortex_cells_ready2hm[,c(6,7,8,9,10)])
+#Removing unnecessary data frames
+rm("cortex","cortex_bri1_20170328_02","cortex_col_20191029_03","cortex_ColBL2","cortex_ColBL1")
+```
+
+#mixture models with EM algorithm - Separating meristem from elongation zone
+```{r - lableling meristem cells, echo=FALSE, message=FALSE, warning=FALSE}
+#histograms + em algorithm
+plot_mix_comps <- function(x, mu, sigma, lam) {
+  lam * dnorm(x, mu, sigma)
+}
+cortex_cells_ready2hm$ProbeMeristem<-0
+##All
+
+len_col <- cortex_cells_ready2hm$length[cortex_cells_ready2hm$PlantType=="col"]
+len_Bri <- cortex_cells_ready2hm$length[cortex_cells_ready2hm$PlantType=="bri"]
+len_colBL <- cortex_cells_ready2hm$length[cortex_cells_ready2hm$PlantType=="colBL"]
+
+set.seed(2)
+mixmdl <- normalmixEM2comp(len_col, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl$mu)
+hstem<-data.frame(x = mixmdl$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl$mu[rdr[1]], mixmdl$sigma[rdr[1]], lam = mixmdl$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl$mu[rdr[2]], mixmdl$sigma[rdr[2]], lam = mixmdl$lambda[rdr[2]]),
+                colour = "red", lwd = 1) +
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "col")
+
+for_scatter<- data.frame(Distance=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="col",5],
+                         Length=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="col",6],
+                         PlantType=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="col",2],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+for_scatter$PlantType<-gsub("col","black",for_scatter$PlantType)
+
+
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("black"))),color = guide_legend(override.aes = list(shape =c(1))))
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_Cortex_col_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_Cortex_col_MM,filename="grid_Cortex_col_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+##Bri
+
+set.seed(2)
+mixmdl_bri <- normalmixEM2comp(len_Bri, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl_bri$mu)
+hstem<-data.frame(x = mixmdl_bri$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_bri$mu[rdr[1]], mixmdl_bri$sigma[rdr[1]], lam = mixmdl_bri$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_bri$mu[rdr[2]], mixmdl_bri$sigma[rdr[2]], lam = mixmdl_bri$lambda[rdr[2]]),
+                colour = "red", lwd = 1)+
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "Bri1")
+for_scatter<- data.frame(Distance=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="bri",5],
+                         Length=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="bri",6],
+                         PlantType=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="bri",1],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl_bri$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+
+for_scatter$PlantType<-gsub("bri","yellow",for_scatter$PlantType)
+#for_scatter$PlantType<-c("black","yellow")[1+as.numeric(for_scatter$PlantType=="bri")]
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("yellow"))),color = guide_legend(override.aes = list(shape =c(1))))
+
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_Cortex_Bri1_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_Cortex_Bri1_MM,filename="grid_Cortex_Bri1_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+##colBL
+
+set.seed(2)
+mixmdl_colBL <- normalmixEM2comp(len_colBL, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl_colBL$mu)
+hstem<-data.frame(x = mixmdl_colBL$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_colBL$mu[rdr[1]], mixmdl_colBL$sigma[rdr[1]], lam = mixmdl_colBL$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_colBL$mu[rdr[2]], mixmdl_colBL$sigma[rdr[2]], lam = mixmdl_colBL$lambda[rdr[2]]),
+                colour = "red", lwd = 1) +
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "colBL")
+
+for_scatter<- data.frame(Distance=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="colBL",5],
+                         Length=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="colBL",6],
+                         PlantType=cortex_cells_ready2hm[cortex_cells_ready2hm$PlantType=="colBL",1],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl_colBL$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+
+for_scatter$PlantType<-gsub("colBL","yellow",for_scatter$PlantType)
+#for_scatter$PlantType<-c("black","yellow")[1+as.numeric(for_scatter$PlantType=="colBL")]
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("yellow"))),color = guide_legend(override.aes = list(shape =c(1))))
+
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_Cortex_colBL_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_Cortex_colBL_MM,filename="grid_Cortex_colBL_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+cortex_cells_ready2hm$ProbeMeristem[cortex_cells_ready2hm$PlantType=="col"]<-mixmdl$posterior[,order(mixmdl$mu)[1]]
+cortex_cells_ready2hm$ProbeMeristem[cortex_cells_ready2hm$PlantType=="bri"]<-mixmdl_bri$posterior[,order(mixmdl_bri$mu)[1]]
+cortex_cells_ready2hm$ProbeMeristem[cortex_cells_ready2hm$PlantType=="colBL"]<-mixmdl_colBL$posterior[,order(mixmdl_colBL$mu)[1]]
+
+```
+
+# Data transformation
+## Distance from QC
+
+```{r - distance transformation, echo=FALSE}
+cortex_meristem_cells<-cortex1
+cortex_meristem_cells$ProbeMeristem<-cortex_cells_ready2hm$ProbeMeristem
+cortex_meristem_cells<-cortex_meristem_cells[cortex_cells_ready2hm$ProbeMeristem>0.8,]
+```
+
+### No transformation
+
+```{r - distance no trnasformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$distance_from.QC,20)
+plot(aov(distance_from.QC~PlantType,data=cortex_meristem_cells))
+```
+
+### Square root transformation
+
+```{r - distance sqrt transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(cortex_meristem_cells$distance_from.QC),20)
+plot(aov(sqrt(distance_from.QC)~PlantType,data=cortex_meristem_cells))
+```
+
+## Length
+
+### No Transformation
+
+```{r - length no transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$length,20)
+plot(aov(length~PlantType,data=cortex_meristem_cells))
+```
+
+### Log2 Transformation
+
+```{r - length log2 transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(cortex_meristem_cells$length),20)
+plot(aov(log2(length)~PlantType,data=cortex_meristem_cells))
+```
+
+## Width
+
+### No Transformation
+
+```{r - width No transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$width,20)
+plot(aov(width~PlantType,data=cortex_meristem_cells))
+
+```
+
+### Square Transformation
+
+```{r - width square transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$width^2,20)
+plot(aov(width^2~PlantType,data=cortex_meristem_cells))
+```
+
+### Square root Transformation
+
+```{r -, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(cortex_meristem_cells$width),20)
+plot(aov(width^.5~PlantType,data=cortex_meristem_cells))
+```
+
+## Depth
+### No Transformation
+
+```{r - depth transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$depth,20)
+plot(aov(depth~PlantType,data=cortex_meristem_cells))
+```
+
+### Log2 transformation
+
+```{r - depth Log2 transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(log2(cortex_meristem_cells$depth),20)
+plot(aov(log2(1+depth)~PlantType,data=cortex_meristem_cells))
+```
+
+## Volume
+
+### No transformation
+```{r - volume no transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$volume,20)
+plot(aov(volume~PlantType,data=cortex_meristem_cells))
+```
+
+### Cubic root
+
+```{r - volume cubic root, echo=FALSE}
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$volume^(1/3),20)
+plot(aov(volume^(1/3)~PlantType,data=cortex_meristem_cells))
+```
+
+### Log2
+
+```{r - volume  log2}
+par(mfrow=c(2,3))
+hist(log2(cortex_meristem_cells$volume),20)
+plot(aov(log2(volume)~PlantType,data=cortex_meristem_cells))
+
+```
+
+## Surface
+### No transformation
+
+```{r - surface no transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(cortex_meristem_cells$surface,20)
+plot(aov(surface~PlantType,data=cortex_meristem_cells))
+```
+
+### Square root
+
+```{r - surface sqrt, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(cortex_meristem_cells$surface),20)
+plot(aov(sqrt(surface)~PlantType,data=cortex_meristem_cells))
+```
+
+### Log2
+
+```{r - surface log2, echo=FALSE}
+par(mfrow=c(2,3))
+hist(log2(cortex_meristem_cells$surface),20)
+plot(aov(log2(surface)~PlantType,data=cortex_meristem_cells))
+```
+
+
+## Transformations decissions
+### Distance from QC - square root
+### length - log2
+### depth - 1+log2
+### width - No
+## volume - ^1/3
+## surfce - sqrt
+
+##Boxplots
+
+### transformed data
+```{r boxplots-treatments, echo=FALSE, message=FALSE, warning=FALSE}
+cortex_meristem_cells_No_transformation<-cortex_meristem_cells
+write.csv(cortex_meristem_cells_No_transformation,"cortex_meristem_cells_No_transformation.csv",row.names = F)
+cortex_meristem_cells$distance_from.QC<-sqrt(cortex_meristem_cells$distance_from.QC)
+cortex_meristem_cells$length<-log2(cortex_meristem_cells$length)
+cortex_meristem_cells$depth<-log2(1+cortex_meristem_cells$depth)
+#cortex_meristem_cells$volume<-log2(cortex_meristem_cells$volume)
+#cortex_meristem_cells$surface<-log2(cortex_meristem_cells$surface)
+cortex_meristem_cells$volume<-(cortex_meristem_cells$volume^(1/3))
+cortex_meristem_cells$surface<-sqrt(cortex_meristem_cells$surface)
+
+#Boxplots
+dst<-ggplot(cortex_meristem_cells,aes(y=distance_from.QC,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("distance_from_QC.tiff")
+lngt<-ggplot(cortex_meristem_cells,aes(y=length,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("length.tiff")
+dpt<-ggplot(cortex_meristem_cells,aes(y=depth,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("depth.tiff")
+wdt<-ggplot(cortex_meristem_cells,aes(y=width,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("width.tiff")
+vlm<-ggplot(cortex_meristem_cells,aes(y=volume,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("volume.tiff")
+sa<-ggplot(cortex_meristem_cells,aes(y=surface,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("volume.tiff")
+
+
+grid.arrange(dst, lngt, dpt,wdt,vlm,sa,ncol = 2)
+
+```
+
+
+
+## Htpothesis testing
+
+### Distance from QC
+```{r hypothesis testing for distance, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+cortex_cells_ready2anova<-cortex_meristem_cells
+cortex_cells_ready2anova$PlantType<-as.factor(cortex_cells_ready2anova$PlantType)
+
+cortexPQL <- lme(fixed=distance_from.QC ~ PlantType ,
+           random= ~1 | plantID/X,
+           data = cortex_cells_ready2anova,
+           method = "ML")
+summary(cortexPQL)$tTable
+cortexTKdist=summary(glht(cortexPQL,linfct=mcp(PlantType="Tukey")))
+cortexTKdist
+```
+
+### Length
+
+```{r hypothesis testing for length, echo=FALSE, message=FALSE, warning=FALSE}
+print("Length")
+
+cortexLMElength <- lmer(length ~ PlantType+distance_from.QC+
+                    (1 | plantID),
+                     data = cortex_cells_ready2anova,
+                     REML=TRUE)
+summary(cortexLMElength)
+#summary(PQLlength)$tTable
+
+
+cortexTKlength=summary(glht(cortexLMElength,linfct=mcp(PlantType="Tukey")))
+cortexTKlength
+
+```
+
+### Width
+
+```{r hypothesis testing for width, echo=FALSE, message=FALSE, warning=FALSE}
+print("width")
+
+cortexLMEwidth <- lmer(width ~ PlantType+distance_from.QC+
+                    (1 | plantID),
+                     data = cortex_cells_ready2anova,
+                     REML=TRUE)
+
+summary(cortexLMEwidth)
+
+#summary(PQLwidth)$tTable
+cortexTKwidth=summary(glht(cortexLMEwidth,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+cortexTKwidth
+```
+
+### Depth
+
+```{r hypothesis testing for depth, echo=FALSE, message=FALSE, warning=FALSE}
+print("depth")
+
+cortexLMEdepth <- lmer(depth ~ PlantType+distance_from.QC+
+                    (1 | plantID),
+                     data = cortex_cells_ready2anova,
+                     REML=TRUE)
+
+summary(cortexLMEdepth)
+#summary(PQLdepth)$tTable
+cortexTKdepth=summary(glht(cortexLMEdepth,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+cortexTKdepth
+
+```
+
+### Volume
+
+```{r hypothesis testing for volume, echo=FALSE, message=FALSE, warning=FALSE}
+print("volume")
+
+cortexLMEvolume <- lmer(volume ~ PlantType+distance_from.QC+
+                    (1 | plantID),
+                     data = cortex_cells_ready2anova,
+                     REML=TRUE)
+
+summary(cortexLMEvolume)
+#summary(PQLvolume)$tTable
+cortexTKvolume=summary(glht(cortexLMEvolume,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+cortexTKvolume
+
+```
+
+### Surface
+
+```{r hypothesis testing for surface, echo=FALSE, message=FALSE, warning=FALSE}
+print("surface")
+
+cortexLMEsurface <- lmer(surface ~ PlantType+distance_from.QC+
+                    (1 | plantID),
+                     data = cortex_cells_ready2anova,
+                     REML = T)
+
+summary(cortexLMEsurface)
+#summary(PQLsurface)$tTable
+cortexTKsurface=summary(glht(cortexLMEsurface,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+cortexTKsurface
+```
+
+### variance proportions
+
+```{r - proportions of variance, echo=FALSE}
+cortex_sumarry_variance<-
+  rbind(as.data.frame(get_variance(cortexLMElength)),
+        as.data.frame(get_variance(cortexLMEdepth)),
+        as.data.frame(get_variance(cortexLMEwidth)),
+        as.data.frame(get_variance(cortexLMEvolume)),
+        as.data.frame(get_variance(cortexLMEsurface))
+  )
+rownames(cortex_sumarry_variance)<-c("length","depth","width","volume","surface")
+cortex_sumarry_variance_prop<-cortex_sumarry_variance[,c(1:3)]/rowSums(cortex_sumarry_variance[,c(1:3)])
+cortex_sumarry_variance_prop<-round(cortex_sumarry_variance_prop*100)
+colnames(cortex_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(cortexLMElength)$`Sum Sq`[1]/sum(anova(cortexLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(cortexLMElength)$`Sum Sq`[2]/sum(anova(cortexLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(cortexLMEdepth)$`Sum Sq`[1]/sum(anova(cortexLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(cortexLMEdepth)$`Sum Sq`[2]/sum(anova(cortexLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(cortexLMEwidth)$`Sum Sq`[1]/sum(anova(cortexLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(cortexLMEwidth)$`Sum Sq`[2]/sum(anova(cortexLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(cortexLMEvolume)$`Sum Sq`[1]/sum(anova(cortexLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(cortexLMEvolume)$`Sum Sq`[2]/sum(anova(cortexLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(cortexLMEsurface)$`Sum Sq`[1]/sum(anova(cortexLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(cortexLMEsurface)$`Sum Sq`[2]/sum(anova(cortexLMEsurface)$`Sum Sq`)
+
+
+#cortex_sumarry_variance_prop$Random<-cortex_sumarry_variance_prop$Cumulative-cortex_sumarry_variance_prop$Distance
+#cortex_sumarry_variance_prop<-cortex_sumarry_variance_prop[,-2]
+
+cortex_sumarry_variance_prop$Treatment<-NA
+cortex_sumarry_variance_prop$Treatment[1]<-cortex_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+cortex_sumarry_variance_prop$Treatment[2]<-cortex_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+cortex_sumarry_variance_prop$Treatment[3]<-cortex_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+cortex_sumarry_variance_prop$Treatment[4]<-cortex_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+cortex_sumarry_variance_prop$Treatment[5]<-cortex_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+
+
+cortex_sumarry_variance_prop$Distance<-NA
+cortex_sumarry_variance_prop$Distance[1]<-cortex_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+cortex_sumarry_variance_prop$Distance[2]<-cortex_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+cortex_sumarry_variance_prop$Distance[3]<-cortex_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+cortex_sumarry_variance_prop$Distance[4]<-cortex_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+cortex_sumarry_variance_prop$Distance[5]<-cortex_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+
+cortex_sumarry_variance_prop$id=rownames(cortex_sumarry_variance_prop)
+cortex_sumarry_variance_prop<-cortex_sumarry_variance_prop[,-1]
+colnames(cortex_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+cortex_sumarry_variance_prop<-data.table::melt(cortex_sumarry_variance_prop,id.vars="id")
+cortex_variance_stacked<-ggplot(cortex_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+cortex_variance_stacked
+
+```
+
+
+```{r}
+sessionInfo()
+```

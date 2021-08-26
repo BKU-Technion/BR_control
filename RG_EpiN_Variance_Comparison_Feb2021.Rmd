@@ -1,0 +1,577 @@
+---
+title: "EpiN mixed ANOVA"
+output:
+  html_document:
+    toc: true
+    df_print: paged
+    toc_float:
+      collapsed: false
+      smooth_scroll: false
+  pdf_document: default
+  word_document: default
+---
+
+  
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(xlsx)
+library(ggplot2)
+library(pheatmap)
+library(mixtools)
+library(mclust)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(lmerTest)
+library(lme4)
+library(RColorBrewer)
+library(nlme)
+library(multcomp)
+library(MASS)
+library(lattice)
+library(EMAtools)
+library(sjstats)
+library(performance)
+library(insight)
+```
+
+```{r}
+## Reading EpiN data
+EpiN<-read.xlsx("./Epidermis.xls",sheetName = "Second File",startRow = 1,stringsAsFactors=F,na.strings = "NA")
+EpiN<-EpiN[,-11]
+Hair<-grep("H",EpiN$PlantType)
+EpiN_ready<-EpiN[Hair,]
+rownames(EpiN_ready)<-EpiN_ready$Unique_ID
+## Rmoving one plant with problematic quantification
+EpiN_ready<-EpiN_ready[!EpiN_ready$PlantID=="20171217__col 0.1 nM BL_A",]
+# Changing plant ID for consistency with other IDs
+EpiN_ready[EpiN_ready$PlantID=="20171217__col 0.1 nM BL_B"]<-"Col_BL20171217__col.0.1.nM.BL_B"
+EpiN_ready$PlantType[EpiN_ready$PlantType=="col_BL-H"]<-"colBL"
+EpiN_ready$PlantType[EpiN_ready$PlantType=="bri1-116_-_H"]<-"bri"
+EpiN_ready$PlantType[EpiN_ready$PlantType=="col_-_H"]<-"col"
+
+EpiN_ColBL1<-read.xlsx("./col_BL_1_updated_20200423.xlsx",sheetName = "Epidermis_N",stringsAsFactors = F)
+EpiN_ColBL1<-EpiN_ColBL1[,c(1:9)]
+EpiN_ColBL2<-read.xlsx("./col_BL_2_updated_20200423.xlsx",sheetName = "Epidermis_N",stringsAsFactors = F)
+EpiN_ColBL2<-EpiN_ColBL2[,c(1:9)]
+#Adding Cell ID (X column) correcting colmn order and names
+EpiN_ColBL1$X<-paste(EpiN_ColBL1$plant.ID,EpiN_ColBL1$Cell.ID,sep = "_")
+EpiN_ColBL1$PlantType<-"colBL"
+EpiN_ColBL1<-EpiN_ColBL1[,c(10,11,2:9)]
+colnames(EpiN_ColBL1)<-colnames(EpiN_ready)
+
+EpiN_ColBL2$X<-paste(EpiN_ColBL2$plant.ID,EpiN_ColBL2$Cell.ID,sep = "_")
+EpiN_ColBL2$PlantType<-"colBL"
+EpiN_ColBL2<-EpiN_ColBL2[,c(10,11,2:9)]
+colnames(EpiN_ColBL2)<-colnames(EpiN_ready)
+
+EpiN_col_20191029_03<-read.xlsx("./col_20191029_03_new.xlsx",sheetName = "Epidermis_N",stringsAsFactors = F)
+EpiN_col_20191029_03$X<-paste(EpiN_col_20191029_03$plant.ID,EpiN_col_20191029_03$Cell.ID,sep = "_")
+EpiN_col_20191029_03$PlantType<-"col"
+EpiN_col_20191029_03<-EpiN_col_20191029_03[,c(10,11,2:9)]
+colnames(EpiN_col_20191029_03)<-colnames(EpiN_ready)
+
+EpiN_bri1_20170328_02<-read.xlsx("./bri1_20170328_02_updated.xlsx",sheetName = "Epidermis_N",stringsAsFactors = F)
+EpiN_bri1_20170328_02$X<-paste(EpiN_bri1_20170328_02$plant.ID,EpiN_bri1_20170328_02$Cell.ID,sep = "_")
+EpiN_bri1_20170328_02$PlantType<-"bri"
+EpiN_bri1_20170328_02<-EpiN_bri1_20170328_02[,c(10,11,2:9)]
+colnames(EpiN_bri1_20170328_02)<-colnames(EpiN_ready)
+
+EpiN1<-rbind(EpiN_ready,EpiN_ColBL1,EpiN_ColBL2,EpiN_col_20191029_03,EpiN_bri1_20170328_02)
+EpiN1<-EpiN1[EpiN1$length>1,]
+EpiN1<-EpiN1[!is.na(EpiN1$length),]
+colnames(EpiN1)[c(1,3)]<-c("X","plantID")
+EpiN_cells_ready2hm<-EpiN1
+EpiN_cells_ready2hm[,c(6,7,8,9,10)]<-log2(EpiN_cells_ready2hm[,c(6,7,8,9,10)])
+
+```
+
+
+
+
+#mixture models with EM algorithm - Separating meristem from elongation zone
+```{r - lableling meristem cells, echo=FALSE, message=FALSE, warning=FALSE}
+#histograms + em algorithm
+plot_mix_comps <- function(x, mu, sigma, lam) {
+  lam * dnorm(x, mu, sigma)
+}
+EpiN_cells_ready2hm$ProbeMeristem<-0
+##All
+
+len_col <- EpiN_cells_ready2hm$length[EpiN_cells_ready2hm$PlantType=="col"]
+len_Bri <- EpiN_cells_ready2hm$length[EpiN_cells_ready2hm$PlantType=="bri"]
+len_colBL <- EpiN_cells_ready2hm$length[EpiN_cells_ready2hm$PlantType=="colBL"]
+
+set.seed(2)
+mixmdl <- normalmixEM2comp(len_col, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl$mu)
+hstem<-data.frame(x = mixmdl$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl$mu[rdr[1]], mixmdl$sigma[rdr[1]], lam = mixmdl$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl$mu[rdr[2]], mixmdl$sigma[rdr[2]], lam = mixmdl$lambda[rdr[2]]),
+                colour = "red", lwd = 1) +
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "col")
+
+for_scatter<- data.frame(Distance=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="col",5],
+                         Length=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="col",6],
+                         PlantType=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="col",2],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+for_scatter$PlantType<-gsub("col","black",for_scatter$PlantType)
+
+
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("black"))),color = guide_legend(override.aes = list(shape =c(1))))
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_EpiN_col_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_EpiN_col_MM,filename="grid_EpiN_col_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+##Bri
+
+set.seed(2)
+mixmdl_bri <- normalmixEM2comp(len_Bri, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl_bri$mu)
+hstem<-data.frame(x = mixmdl_bri$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_bri$mu[rdr[1]], mixmdl_bri$sigma[rdr[1]], lam = mixmdl_bri$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_bri$mu[rdr[2]], mixmdl_bri$sigma[rdr[2]], lam = mixmdl_bri$lambda[rdr[2]]),
+                colour = "red", lwd = 1)+
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "Bri1")
+for_scatter<- data.frame(Distance=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="bri",5],
+                         Length=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="bri",6],
+                         PlantType=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="bri",1],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl_bri$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+
+for_scatter$PlantType<-gsub("bri","yellow",for_scatter$PlantType)
+#for_scatter$PlantType<-c("black","yellow")[1+as.numeric(for_scatter$PlantType=="bri")]
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("yellow"))),color = guide_legend(override.aes = list(shape =c(1))))
+
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_EpiN_Bri1_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_EpiN_Bri1_MM,filename="grid_EpiN_Bri1_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+##colBL
+
+set.seed(2)
+mixmdl_colBL <- normalmixEM2comp(len_colBL, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl_colBL$mu)
+hstem<-data.frame(x = mixmdl_colBL$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_colBL$mu[rdr[1]], mixmdl_colBL$sigma[rdr[1]], lam = mixmdl_colBL$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_colBL$mu[rdr[2]], mixmdl_colBL$sigma[rdr[2]], lam = mixmdl_colBL$lambda[rdr[2]]),
+                colour = "red", lwd = 1) +
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "colBL")
+
+for_scatter<- data.frame(Distance=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="colBL",5],
+                         Length=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="colBL",6],
+                         PlantType=EpiN_cells_ready2hm[EpiN_cells_ready2hm$PlantType=="colBL",1],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl_colBL$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+
+for_scatter$PlantType<-gsub("colBL","yellow",for_scatter$PlantType)
+#for_scatter$PlantType<-c("black","yellow")[1+as.numeric(for_scatter$PlantType=="colBL")]
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("yellow"))),color = guide_legend(override.aes = list(shape =c(1))))
+
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_EpiN_colBL_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_EpiN_colBL_MM,filename="grid_EpiN_colBL_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+EpiN_cells_ready2hm$ProbeMeristem[EpiN_cells_ready2hm$PlantType=="col"]<-mixmdl$posterior[,order(mixmdl$mu)[1]]
+EpiN_cells_ready2hm$ProbeMeristem[EpiN_cells_ready2hm$PlantType=="bri"]<-mixmdl_bri$posterior[,order(mixmdl_bri$mu)[1]]
+EpiN_cells_ready2hm$ProbeMeristem[EpiN_cells_ready2hm$PlantType=="colBL"]<-mixmdl_colBL$posterior[,order(mixmdl_colBL$mu)[1]]
+
+```
+
+# Data transformation
+## Distance from QC
+
+```{r - distance transformation, echo=FALSE}
+EpiN_meristem_cells<-EpiN1
+EpiN_meristem_cells$ProbeMeristem<-EpiN_cells_ready2hm$ProbeMeristem
+EpiN_meristem_cells<-EpiN_meristem_cells[EpiN_cells_ready2hm$ProbeMeristem>0.8,]
+```
+
+### No transformation
+
+```{r - distance no trnasformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$distance_from.QC,20)
+plot(aov(distance_from.QC~PlantType,data=EpiN_meristem_cells))
+```
+
+### Square root transformation
+
+```{r - distance sqrt transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(EpiN_meristem_cells$distance_from.QC),20)
+plot(aov(sqrt(distance_from.QC)~PlantType,data=EpiN_meristem_cells))
+```
+
+## Length
+
+### No Transformation
+
+```{r - length no transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$length,20)
+plot(aov(length~PlantType,data=EpiN_meristem_cells))
+```
+
+### Log2 Transformation
+
+```{r - length log2 transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(EpiN_meristem_cells$length),20)
+plot(aov(log2(length)~PlantType,data=EpiN_meristem_cells))
+```
+
+## Width
+
+### No Transformation
+
+```{r - width No transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$width,20)
+plot(aov(width~PlantType,data=EpiN_meristem_cells))
+
+```
+
+### Square Transformation
+
+```{r - width square transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$width^2,20)
+plot(aov(width^2~PlantType,data=EpiN_meristem_cells))
+```
+
+### Square root Transformation
+
+```{r -, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(EpiN_meristem_cells$width),20)
+plot(aov(width^.5~PlantType,data=EpiN_meristem_cells))
+```
+
+## Depth
+### No Transformation
+
+```{r - depth transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$depth,20)
+plot(aov(depth~PlantType,data=EpiN_meristem_cells))
+```
+
+### Log2 transformation
+
+```{r - depth Log2 transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(log2(EpiN_meristem_cells$depth),20)
+plot(aov(log2(1+depth)~PlantType,data=EpiN_meristem_cells))
+```
+
+## Volume
+
+### No transformation
+```{r - volume no transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$volume,20)
+plot(aov(volume~PlantType,data=EpiN_meristem_cells))
+```
+
+### Cubic root
+
+```{r - volume cubic root, echo=FALSE}
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$volume^(1/3),20)
+plot(aov(volume^(1/3)~PlantType,data=EpiN_meristem_cells))
+```
+
+### Log2
+
+```{r - volume  log2}
+par(mfrow=c(2,3))
+hist(log2(EpiN_meristem_cells$volume),20)
+plot(aov(log2(volume)~PlantType,data=EpiN_meristem_cells))
+
+```
+
+## Surface
+### No transformation
+
+```{r - surface no transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(EpiN_meristem_cells$surface,20)
+plot(aov(surface~PlantType,data=EpiN_meristem_cells))
+```
+
+### Square root
+
+```{r - surface sqrt, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(EpiN_meristem_cells$surface),20)
+plot(aov(sqrt(surface)~PlantType,data=EpiN_meristem_cells))
+```
+
+### Log2
+
+```{r - surface log2, echo=FALSE}
+par(mfrow=c(2,3))
+hist(log2(EpiN_meristem_cells$surface),20)
+plot(aov(log2(surface)~PlantType,data=EpiN_meristem_cells))
+```
+
+
+## Transformations decissions
+### Distance from QC - square root
+### length - log2
+### depth - 1+log2
+### width - No
+## volume - ^1/3
+## surfce - square root
+
+##Boxplots
+
+### transformed data
+```{r boxplots-treatments, echo=FALSE, message=FALSE, warning=FALSE}
+EpiN_meristem_cells_No_transformation<-EpiN_meristem_cells
+write.csv(EpiN_meristem_cells_No_transformation,"EpiN_meristem_cells_No_transformation.csv",row.names = F)
+EpiN_meristem_cells$distance_from.QC<-sqrt(EpiN_meristem_cells$distance_from.QC)
+EpiN_meristem_cells$length<-log2(EpiN_meristem_cells$length)
+EpiN_meristem_cells$depth<-log2(1+EpiN_meristem_cells$depth)
+EpiN_meristem_cells$volume<-EpiN_meristem_cells$volume^(1/3)
+EpiN_meristem_cells$surface<-sqrt(EpiN_meristem_cells$surface)
+
+#Boxplots
+dst<-ggplot(EpiN_meristem_cells,aes(y=distance_from.QC,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("distance_from_QC.tiff")
+lngt<-ggplot(EpiN_meristem_cells,aes(y=length,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("length.tiff")
+dpt<-ggplot(EpiN_meristem_cells,aes(y=depth,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("depth.tiff")
+wdt<-ggplot(EpiN_meristem_cells,aes(y=width,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("width.tiff")
+vlm<-ggplot(EpiN_meristem_cells,aes(y=volume,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("volume.tiff")
+sa<-ggplot(EpiN_meristem_cells,aes(y=surface,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("volume.tiff")
+
+
+grid.arrange(dst, lngt, dpt,wdt,vlm,sa,ncol = 2)
+
+```
+
+
+
+## Htpothesis testing
+
+### Distance from QC
+```{r hypothesis testing for distance, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+EpiN_cells_ready2anova<-EpiN_meristem_cells
+EpiN_cells_ready2anova$PlantType<-as.factor(EpiN_cells_ready2anova$PlantType)
+
+EpiNPQL <- lme(fixed=distance_from.QC ~ PlantType ,
+                 random= ~1 | plantID/X,
+                 data = EpiN_cells_ready2anova,
+                 method = "ML")
+summary(EpiNPQL)$tTable
+EpiNTKdist=summary(glht(EpiNPQL,linfct=mcp(PlantType="Tukey")))
+EpiNTKdist
+```
+
+### Length
+
+```{r hypothesis testing for length, echo=FALSE, message=FALSE, warning=FALSE}
+print("Length")
+
+EpiNLMElength <- lmer(length ~ PlantType+distance_from.QC+
+                          (1 | plantID),
+                        data = EpiN_cells_ready2anova,
+                        REML=TRUE)
+summary(EpiNLMElength)
+#summary(PQLlength)$tTable
+
+
+EpiNTKlength=summary(glht(EpiNLMElength,linfct=mcp(PlantType="Tukey")))
+EpiNTKlength
+
+```
+
+### Width
+
+```{r hypothesis testing for width, echo=FALSE, message=FALSE, warning=FALSE}
+print("width")
+
+EpiNLMEwidth <- lmer(width ~ PlantType+distance_from.QC+
+                         (1 | plantID),
+                       data = EpiN_cells_ready2anova,
+                       REML=TRUE)
+
+summary(EpiNLMEwidth)
+
+#summary(PQLwidth)$tTable
+EpiNTKwidth=summary(glht(EpiNLMEwidth,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+EpiNTKwidth
+```
+
+### Depth
+
+```{r hypothesis testing for depth, echo=FALSE, message=FALSE, warning=FALSE}
+print("depth")
+
+EpiNLMEdepth <- lmer(depth ~ PlantType+distance_from.QC+
+                         (1 | plantID),
+                       data = EpiN_cells_ready2anova,
+                       REML=TRUE)
+
+summary(EpiNLMEdepth)
+#summary(PQLdepth)$tTable
+EpiNTKdepth=summary(glht(EpiNLMEdepth,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+EpiNTKdepth
+
+```
+
+### Volume
+
+```{r hypothesis testing for volume, echo=FALSE, message=FALSE, warning=FALSE}
+print("volume")
+
+EpiNLMEvolume <- lmer(volume ~ PlantType+distance_from.QC+
+                          (1 | plantID),
+                        data = EpiN_cells_ready2anova,
+                        REML=TRUE)
+
+summary(EpiNLMEvolume)
+#summary(PQLvolume)$tTable
+EpiNTKvolume=summary(glht(EpiNLMEvolume,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+EpiNTKvolume
+
+```
+
+### Surface
+
+```{r hypothesis testing for surface, echo=FALSE, message=FALSE, warning=FALSE}
+print("surface")
+
+EpiNLMEsurface <- lmer(surface ~ PlantType+distance_from.QC+
+                           (1 | plantID),
+                         data = EpiN_cells_ready2anova,
+                         REML = T)
+
+summary(EpiNLMEsurface)
+#summary(PQLsurface)$tTable
+EpiNTKsurface=summary(glht(EpiNLMEsurface,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+EpiNTKsurface
+```
+
+### variance proportions
+
+```{r - proportions of variance, echo=FALSE}
+EpiN_sumarry_variance<-
+  rbind(as.data.frame(get_variance(EpiNLMElength)),
+        as.data.frame(get_variance(EpiNLMEdepth)),
+        as.data.frame(get_variance(EpiNLMEwidth)),
+        as.data.frame(get_variance(EpiNLMEvolume)),
+        as.data.frame(get_variance(EpiNLMEsurface))
+  )
+rownames(EpiN_sumarry_variance)<-c("length","depth","width","volume","surface")
+EpiN_sumarry_variance_prop<-EpiN_sumarry_variance[,c(1:3)]/rowSums(EpiN_sumarry_variance[,c(1:3)])
+EpiN_sumarry_variance_prop<-round(EpiN_sumarry_variance_prop*100)
+colnames(EpiN_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(EpiNLMElength)$`Sum Sq`[1]/sum(anova(EpiNLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(EpiNLMElength)$`Sum Sq`[2]/sum(anova(EpiNLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(EpiNLMEdepth)$`Sum Sq`[1]/sum(anova(EpiNLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(EpiNLMEdepth)$`Sum Sq`[2]/sum(anova(EpiNLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(EpiNLMEwidth)$`Sum Sq`[1]/sum(anova(EpiNLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(EpiNLMEwidth)$`Sum Sq`[2]/sum(anova(EpiNLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(EpiNLMEvolume)$`Sum Sq`[1]/sum(anova(EpiNLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(EpiNLMEvolume)$`Sum Sq`[2]/sum(anova(EpiNLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(EpiNLMEsurface)$`Sum Sq`[1]/sum(anova(EpiNLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(EpiNLMEsurface)$`Sum Sq`[2]/sum(anova(EpiNLMEsurface)$`Sum Sq`)
+
+
+#EpiN_sumarry_variance_prop$Random<-EpiN_sumarry_variance_prop$Cumulative-EpiN_sumarry_variance_prop$Distance
+#EpiN_sumarry_variance_prop<-EpiN_sumarry_variance_prop[,-2]
+
+EpiN_sumarry_variance_prop$Treatment<-NA
+EpiN_sumarry_variance_prop$Treatment[1]<-EpiN_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[2]<-EpiN_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[3]<-EpiN_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[4]<-EpiN_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[5]<-EpiN_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+
+
+EpiN_sumarry_variance_prop$Distance<-NA
+EpiN_sumarry_variance_prop$Distance[1]<-EpiN_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+EpiN_sumarry_variance_prop$Distance[2]<-EpiN_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+EpiN_sumarry_variance_prop$Distance[3]<-EpiN_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+EpiN_sumarry_variance_prop$Distance[4]<-EpiN_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+EpiN_sumarry_variance_prop$Distance[5]<-EpiN_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+
+EpiN_sumarry_variance_prop$id=rownames(EpiN_sumarry_variance_prop)
+EpiN_sumarry_variance_prop<-EpiN_sumarry_variance_prop[,-1]
+colnames(EpiN_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+EpiN_sumarry_variance_prop<-data.table::melt(EpiN_sumarry_variance_prop,id.vars="id")
+EpiN_variance_stacked<-ggplot(EpiN_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+EpiN_variance_stacked
+
+```
+
+
+```{r}
+sessionInfo()
+```

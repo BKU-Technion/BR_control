@@ -1,0 +1,623 @@
+---
+title: "ANOVA Summary - Tissue comparison"
+author: "Guy Horev"
+date: "June 2, 2021"
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r - load packages, include=FALSE}
+library(xlsx)
+library(ggplot2)
+library(pheatmap)
+library(mixtools)
+library(mclust)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(lmerTest)
+library(lme4)
+library(RColorBrewer)
+library(nlme)
+library(multcomp)
+library(MASS)
+library(lattice)
+library(EMAtools)
+library(sjstats)
+library(performance)
+library(insight)
+library(reshape2)
+library(ggrepel)
+library(lsmeans)
+library(viridis)
+```
+
+
+```{r - load data}
+load(file = "./mixed5tissues_June2021.RData")
+```
+
+## Regression plots
+
+```{r - colorblind safe}
+clrsafe<-turbo(15,direction = -1)[c(2,10,14)]
+clrsafedots<-turbo(15,direction = -1)[c(3,9,13)]
+brks=c("bri","col","colBL")
+```
+
+
+```{r - Regression from Mixed Model EpiH, echo=FALSE, warning=FALSE}
+
+EpiHlngt_vs_d<-ggplot(EpiHLMElength@frame, aes(x = distance_from.QC^2, y = length, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Length")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMElength))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMElength))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMElength))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+EpiHdpt_vs_d<-ggplot(EpiHLMEdepth@frame, aes(x = distance_from.QC^2, y = depth, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Depth")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEdepth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEdepth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEdepth))),colour=clrsafe[3],size=1.5)+scale_x_sqrt(breaks=c(20,150,300))+
+  coord_cartesian( ylim = c(2.4,5))
+
+EpiHwdt_vs_d<-ggplot(EpiHLMEwidth@frame, aes(x = distance_from.QC^2, y = width, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Width")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEwidth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEwidth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEwidth))),colour=clrsafe[3],size=1.5)+scale_x_sqrt(breaks=c(20,150,300))+
+  coord_cartesian( ylim = c(5,25))
+
+EpiHvlm_vs_d<-ggplot(EpiHLMEvolume@frame, aes(x = distance_from.QC^2, y = volume, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Volume")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEvolume))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEvolume))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEvolume))),colour=clrsafe[3],size=1.5)+scale_x_sqrt(breaks=c(20,150,300))
+
+EpiHsa_vs_d<-ggplot(EpiHLMEsurface@frame, aes(x = distance_from.QC^2, y = surface, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Surface Area")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEsurface))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEsurface))),colour=clrsafe[2],size=2.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEsurface))),colour=clrsafe[3],size=1.2)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+EpiHanis_vs_d<-ggplot(EpiHLMEAnisotropy@frame, aes(x = 'sqrt(distance_from.QC)'^2, y = 'log2(1+Anisotropy)', colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Anisotropy")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEsurface))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEsurface))),colour=clrsafe[2],size=2.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiHLMEsurface))),colour=clrsafe[3],size=1.2)+
+  scale_x_sqrt(breaks=c(20,150,300))
+  
+
+
+grid.arrange(EpiHlngt_vs_d, EpiHdpt_vs_d,EpiHwdt_vs_d,EpiHvlm_vs_d,EpiHsa_vs_d,ncol = 2,top="Hair Cells")
+grid_epiH<-arrangeGrob(EpiHlngt_vs_d, EpiHdpt_vs_d,EpiHwdt_vs_d,EpiHvlm_vs_d,EpiHsa_vs_d,ncol = 2,top="Hair Cells")
+ggsave(grid_epiH,filename="grid_epiH__June2021.pdf",height = 12,width = 14,units = "cm")
+```
+
+
+```{r - Regression from Mixed Model EpiN, echo=FALSE, warning=FALSE}
+
+EpiNlngt_vs_d<-ggplot(EpiNLMElength@frame, aes(x = distance_from.QC^2, y = length, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Length")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMElength))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMElength))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMElength))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+EpiNdpt_vs_d<-ggplot(EpiNLMEdepth@frame, aes(x = distance_from.QC^2, y = depth, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Depth")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEdepth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEdepth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEdepth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+EpiNwdt_vs_d<-ggplot(EpiNLMEwidth@frame, aes(x = distance_from.QC^2, y = width, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Width")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEwidth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEwidth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEwidth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))+
+  coord_cartesian( ylim = c(3,28))
+
+EpiNvlm_vs_d<-ggplot(EpiNLMEvolume@frame, aes(x = distance_from.QC^2, y = volume, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Volume")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEvolume))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEvolume))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEvolume))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+EpiNsa_vs_d<-ggplot(EpiNLMEsurface@frame, aes(x = distance_from.QC^2, y = surface, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Surface Area")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEsurface))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEsurface))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(EpiNLMEsurface))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+  
+
+
+grid.arrange(EpiNlngt_vs_d, EpiNdpt_vs_d,EpiNwdt_vs_d,EpiNvlm_vs_d,EpiNsa_vs_d,ncol = 2, top = "Non-Hair Cells")
+grid_epiN<-arrangeGrob(EpiNlngt_vs_d, EpiNdpt_vs_d,EpiNwdt_vs_d,EpiNvlm_vs_d,EpiNsa_vs_d,ncol = 2, top = "Non-Hair Cells")
+ggsave(grid_epiN,filename="grid_epiN__June2021.pdf",height = 12,width = 14,units = "cm")
+
+```
+
+```{r - Regression from Mixed Model cortex, echo=FALSE, warning=FALSE}
+
+cortexlngt_vs_d<-ggplot(cortexLMElength@frame, aes(x = distance_from.QC^2, y = length, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Length")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMElength))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMElength))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMElength))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))+
+  coord_cartesian( ylim = c(1.48,3.6))
+
+cortexdpt_vs_d<-ggplot(cortexLMEdepth@frame, aes(x = distance_from.QC^2, y = depth, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Depth")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEdepth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEdepth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEdepth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))+
+  scale_y_continuous(breaks=c(2,3,4),minor_breaks = seq(2,5,0.5))+coord_cartesian( ylim = c(2,4.8))
+
+cortexwdt_vs_d<-ggplot(cortexLMEwidth@frame, aes(x = distance_from.QC^2, y = width, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Width")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEwidth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEwidth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEwidth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))+coord_cartesian( ylim = c(4,34))
+
+cortexvlm_vs_d<-ggplot(cortexLMEvolume@frame, aes(x = distance_from.QC^2, y = volume, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Volume")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEvolume))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEvolume))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEvolume))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+cortexsa_vs_d<-ggplot(cortexLMEsurface@frame, aes(x = distance_from.QC^2, y = surface, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Surface Area")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEsurface))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEsurface))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(cortexLMEsurface))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+  
+
+
+grid.arrange(cortexlngt_vs_d, cortexdpt_vs_d,cortexwdt_vs_d,cortexvlm_vs_d,cortexsa_vs_d,ncol = 2,top="Cortex")
+grid_cortex<-arrangeGrob(cortexlngt_vs_d, cortexdpt_vs_d,cortexwdt_vs_d,cortexvlm_vs_d,cortexsa_vs_d,ncol = 2,top="Cortex")
+ggsave(grid_cortex,filename="grid_cortex__June2021.pdf",height = 12,width = 14,units = "cm")
+
+```
+
+
+```{r - Regression from Mixed Model endo, echo=FALSE, warning=FALSE}
+
+endolngt_vs_d<-ggplot(endoLMElength@frame, aes(x = distance_from.QC^2, y = length, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Length")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(endoLMElength))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(endoLMElength))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(endoLMElength))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+endodpt_vs_d<-ggplot(endoLMEdepth@frame, aes(x = distance_from.QC^2, y = depth, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Depth")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEdepth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEdepth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEdepth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))+
+  coord_cartesian( ylim = c(1,4.6))
+
+endowdt_vs_d<-ggplot(endoLMEwidth@frame, aes(x = distance_from.QC^2, y = width, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Width")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEwidth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEwidth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEwidth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+endovlm_vs_d<-ggplot(endoLMEvolume@frame, aes(x = distance_from.QC^2, y = volume, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Volume")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEvolume))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEvolume))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEvolume))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+endosa_vs_d<-ggplot(endoLMEsurface@frame, aes(x = distance_from.QC^2, y = surface, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Surface Area")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEsurface))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEsurface))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(endoLMEsurface))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+  
+
+
+grid.arrange(endolngt_vs_d, endodpt_vs_d,endowdt_vs_d,endovlm_vs_d,endosa_vs_d,ncol = 2, top="Endodermis")
+grid_endo<-arrangeGrob(endolngt_vs_d, endodpt_vs_d,endowdt_vs_d,endovlm_vs_d,endosa_vs_d,ncol = 2, top="Endodermis")
+ggsave(grid_endo,filename="grid_endo__June2021.pdf",height = 12,width = 14,units = "cm")
+
+```
+
+
+```{r - Regression from Mixed Model pericycle, echo=FALSE, warning=FALSE}
+
+pericyclelngt_vs_d<-ggplot(pericycleLMElength@frame, aes(x = distance_from.QC^2, y = length, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Length")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMElength))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMElength))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMElength))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))+
+  coord_cartesian( ylim = c(1,4.8))
+
+pericycledpt_vs_d<-ggplot(pericycleLMEdepth@frame, aes(x = distance_from.QC^2, y = depth, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Depth")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEdepth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEdepth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEdepth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))+
+  coord_cartesian( ylim = c(1,4.3))
+
+pericyclewdt_vs_d<-ggplot(pericycleLMEwidth@frame, aes(x = distance_from.QC^2, y = width, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Width")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEwidth))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEwidth))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEwidth))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+pericyclevlm_vs_d<-ggplot(pericycleLMEvolume@frame, aes(x = distance_from.QC^2, y = volume, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Volume")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEvolume))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEvolume))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEvolume))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+
+pericyclesa_vs_d<-ggplot(pericycleLMEsurface@frame, aes(x = distance_from.QC^2, y = surface, colour=PlantType)) +
+  scale_color_manual(values = clrsafedots,breaks =brks)+
+  labs(x="Distance form QC",y="Surface area")+
+  geom_point(shape = 16, size=1.5, alpha=1) +   theme(legend.position = "none") +
+  geom_abline(aes(intercept=`(Intercept)`, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEsurface))),colour=clrsafe[1],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecol, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEsurface))),colour=clrsafe[2],size=1.5)+
+  geom_abline(aes(intercept=`(Intercept)`+PlantTypecolBL, slope=distance_from.QC), as.data.frame(t(fixef(pericycleLMEsurface))),colour=clrsafe[3],size=1.5)+
+  scale_x_sqrt(breaks=c(20,150,300))
+  
+
+grid.arrange(pericyclelngt_vs_d, pericycledpt_vs_d,pericyclewdt_vs_d,pericyclevlm_vs_d,pericyclesa_vs_d,ncol = 2,top="Pericycle")
+grid_peri<-arrangeGrob(pericyclelngt_vs_d, pericycledpt_vs_d,pericyclewdt_vs_d,pericyclevlm_vs_d,pericyclesa_vs_d,ncol = 2,top="Pericycle")
+ggsave(grid_peri,filename="grid_peri__June2021.pdf",height = 12,width = 14,units = "cm")
+
+#grid.arrange(EpiNlngt_vs_d, EpiNdpt_vs_d,EpiNwdt_vs_d,EpiNvlm_vs_d,EpiNsa_vs_d,EpiHlngt_vs_d, EpiHdpt_vs_d,EpiHwdt_vs_d,EpiHvlm_vs_d,EpiHsa_vs_d,endolngt_vs_d, endodpt_vs_d,endowdt_vs_d,endovlm_vs_d,endosa_vs_d,cortexlngt_vs_d, cortexdpt_vs_d,cortexwdt_vs_d,cortexvlm_vs_d,cortexsa_vs_d,pericyclelngt_vs_d, pericycledpt_vs_d,pericyclewdt_vs_d,pericyclevlm_vs_d,pericyclesa_vs_d,ncol = 5)
+
+```
+
+
+
+```{r - performing all ANOVA, include=FALSE}
+#first we summarize the p-values for all the fixed hypotheses we performed
+#for each Tissue (5 tissues) and variable (5 variables, sa2v is removed ) there are 2 p-values, on for distance and one for treatment.
+
+
+
+aov_pericycle_distance<-anova(pericyclePQL)
+aov_cortex_distance<-anova(cortexPQL)
+aov_endo_distance<-anova(endoPQL)
+aov_EpiN_distance<-anova(EpiNPQL)
+aov_EpiH_distance<-anova(EpiHPQL)
+
+
+
+env_objects<-ls()
+env_mixed<-env_objects[grep("LME",env_objects)]
+#env_mixed<-env_mixed[-grep("LMEper",env_mixed)]
+cnt=0
+p.PlantType<-NULL
+p.Distance<-NULL
+for(ii in env_mixed){
+  cnt=cnt+1
+  p.PlantType[cnt]<-anova(get(ii))[1,6]
+  p.Distance[cnt]<-anova(get(ii))[2,6]
+}
+All_Anova<-melt(data.frame(Comparison=env_mixed,p.PlantType=p.PlantType,p.Distance=p.Distance))
+#All_Anova<-All_Anova[-grep("sa2v",All_Anova$Comparison),]
+All_Anova$padj<-p.adjust(All_Anova$value,method = "BH")
+```
+
+#ANOVA summary without pairwise comparisons
+
+
+
+```{r echo=FALSE}
+#Representation of the plant type ANOVA
+
+plantType_Anova<-All_Anova[All_Anova$variable=="p.PlantType",]
+plantType_Anova$Tissue<-sub("LME.*",replacement = "",x = plantType_Anova$Comparison)
+
+plantType_Anova$Tissue<-sub("cortex",replacement = "Cortex",x = plantType_Anova$Tissue)
+plantType_Anova$Tissue<-sub("endo",replacement = "Endo",x = plantType_Anova$Tissue)
+plantType_Anova$Tissue<-sub("pericycle",replacement = "Pericycle",x = plantType_Anova$Tissue)
+
+plantType_Anova$GVariable<-sub(".*LME",replacement = "",x = plantType_Anova$Comparison)
+anv_plot<-ggplot(plantType_Anova,aes(Tissue,-log10(value),shape=GVariable,alpha=(0.25+as.numeric(padj<0.1))/1.25,label=GVariable))+
+  geom_point(size=5,col="#4000b4",fill="#4000b4")+
+  geom_text_repel(point.padding=0.8,max.overlaps = 15)+
+  scale_alpha(range = c(0.2,1),breaks=c(0.2,1),labels=c("No","Yes"))+
+  #scale_shape_manual(values=21:25)+
+  ylab("Significance")+
+  scale_x_discrete(limits=c("EpiN","EpiH","Cortex","Endo","Pericycle"))+
+  labs(alpha="Significant")
+#ggsave(anv_plot,filename="ANOVA_plot1_June2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+anv_plot
+```
+
+
+```{r treatment variance proportion, echo=FALSE}
+cortex_sumarry_variance_prop$Tissue<-"Cortex"
+pericycle_sumarry_variance_prop$Tissue<-"Pericycle"
+endo_sumarry_variance_prop$Tissue<-"Endo"
+EpiN_sumarry_variance_prop$Tissue<-"EpiN"
+EpiH_sumarry_variance_prop$Tissue<-"EpiH"
+sumarry_variance_prop<-rbind(cortex_sumarry_variance_prop,
+                             pericycle_sumarry_variance_prop,
+                             endo_sumarry_variance_prop,
+                             EpiN_sumarry_variance_prop,
+                             EpiH_sumarry_variance_prop)
+#sumarry_variance_prop<-sumarry_variance_prop[!sumarry_variance_prop$id=="SA2V",]
+
+
+
+bx<-ggplot(sumarry_variance_prop[sumarry_variance_prop$variable=="Treatment",],aes(id,value,label=Tissue))+
+  geom_boxplot(fill="#4682B4",)+
+  geom_point(size=4,shape=21,col="gray",fill="gray")+
+  geom_text_repel(box.padding = 1,size=3,color="#800000",max.overlaps = 15)+scale_y_log10(breaks=c(0,1,10,50))+
+  labs(title = "Treatment")+
+  scale_x_discrete(limits=rev(c("depth","length","width","surface","volume","anisotropy")))+
+  theme_classic()+
+  coord_flip()
+#ggsave(bx,filename="vertical_boxplot_June2021.eps",height = 16,width = 8,units = "cm",device=cairo_ps)
+
+# bxnsq<-ggplot(sumarry_variance_prop[sumarry_variance_prop$variable=="Treatment",],aes(id,value,label=Tissue))+
+#   geom_boxplot(fill="#4682B4",)+
+#   geom_point(size=4,shape=21,col="gray",fill="gray")+
+#   geom_text_repel(box.padding = 1,size=3,color="#800000",max.overlaps = 15)+
+#   labs(title = "Treatment")+
+#   scale_x_discrete(limits=rev(c("depth","length","width","surface","volume","anisotropy")))+
+#   theme_classic()+
+#   coord_flip()
+#ggsave(bx,filename="boxplot1__June2021.eps",height = 16,width = 8,units = "cm",device=cairo_ps)
+   
+bx
+
+```
+
+
+```{r Distance variance proportion, echo=FALSE}
+
+
+
+bx_dist<-ggplot(sumarry_variance_prop[sumarry_variance_prop$variable=="Distance",],aes(id,value,label=Tissue))+
+  geom_boxplot(fill="#4682B4",)+
+  geom_point(size=4,shape=21,col="gray",fill="gray")+
+  geom_text_repel(box.padding = 1,size=3,color="#800000",max.overlaps = 15)+scale_y_sqrt()+
+  labs(title = "Distance")+
+  scale_x_discrete(limits=rev(c("depth","length","width","surface","volume","anisotropy")))+
+  theme_classic()+
+  coord_flip()
+#ggsave(bx_dist,filename="boxplot_dist_June2021.eps",height = 16,width = 8,units = "cm",device=cairo_ps)
+   
+bx_dist
+
+```
+
+```{r Tissue variance proportion, echo=FALSE}
+
+
+
+bx_treatment_in_tissue<-ggplot(sumarry_variance_prop[sumarry_variance_prop$variable=="Treatment",],aes(Tissue,value,label=id))+
+  geom_boxplot(fill="#4682B4",)+
+  geom_point(size=4,shape=21,col="gray",fill="gray")+
+  geom_text_repel(box.padding = 1,size=3,color="#800000",max.overlaps = 15)+
+  scale_y_log10()+
+  labs(title = "Treatment in tissue")+
+  scale_x_discrete(limits=c("Pericycle","Endo","Cortex","EpiH","EpiN"))+
+  theme_classic()+
+  coord_flip()
+
+#ggsave(bx_treatment_in_tissue,filename="boxplot_treatment_in_tissue_June2021.eps",height = 16,width = 8,units = "cm",device=cairo_ps)
+   
+bx_treatment_in_tissue
+
+
+
+bx_distance_in_tissue<-ggplot(sumarry_variance_prop[sumarry_variance_prop$variable=="Distance",],aes(Tissue,value,label=id))+
+  geom_boxplot(fill="#4682B4",)+
+  geom_point(size=4,shape=21,col="gray",fill="gray")+
+  geom_text_repel(box.padding = 1,size=3,color="#800000",max.overlaps = 15)+
+  scale_y_log10()+
+  labs(title = "Distance in tissue")+
+  scale_x_discrete(limits=c("Pericycle","Endo","Cortex","EpiH","EpiN"))+
+  theme_classic()+
+  coord_flip()
+
+#ggsave(bx_distance_in_tissue,filename="boxplot_distance_in_tissue_June2021.eps",height = 16,width = 8,units = "cm",device=cairo_ps)
+   
+bx_distance_in_tissue
+```
+
+```{r include=FALSE}
+#performing BKY procedure to correct for multiple hypothses of the pairwise comparisons
+posthoc<-ls()[grep("TK",ls())] # find al posthoc comparisons
+posthoc<-posthoc[-grep("dist",as.character(posthoc))] # remove distance
+posthoc_coef<-data.frame(test=posthoc,col_bri=NA,BL_bri=NA,BL_col=NA) # prepare data frame for coeficients
+posthoc_pval<-data.frame(test=posthoc,col_bri=NA,BL_bri=NA,BL_col=NA) #prepare data frame for p-valuse
+
+for(ii in 1:length(posthoc)){
+  #Extratct coeficients and p-values
+  posthoc_coef[ii,2:4]<-get(posthoc[ii])$test$coefficients
+  posthoc_pval[ii,2:4]<-get(posthoc[ii])$test$pvalues
+}
+# Add Tissue and Geometric variable columns
+posthoc_coef$Tissue<-sub("TK.*",replacement = "",x = posthoc_coef$test)
+posthoc_coef$GVariable<-sub(".*TK",replacement = "",x = posthoc_coef$test)
+
+posthoc_pval$Tissue<-sub("TK.*",replacement = "",x = posthoc_pval$test)
+posthoc_pval$GVariable<-sub(".*TK",replacement = "",x = posthoc_pval$test)
+
+posthoc_coef_pval<-merge(posthoc_coef,posthoc_pval,by=c("Tissue","GVariable"))
+posthoc_coef_pval$Tissue<-sub("cortex",replacement = "Cortex",x = posthoc_coef_pval$Tissue)
+posthoc_coef_pval$Tissue<-sub("endo",replacement = "Endo",x = posthoc_coef_pval$Tissue)
+posthoc_coef_pval$Tissue<-sub("pericycle",replacement = "Pericycle",x = posthoc_coef_pval$Tissue)
+
+#sig_Anova<-plantType_Anova[plantType_Anova$padj<0.1,c(5,6)]
+#Merging anova p-values and posthoc 
+posthoc_2<-merge(plantType_Anova,posthoc_coef_pval,by=c("Tissue","GVariable"))  
+posthoc_2$sig_1<-posthoc_2$padj<0.1 #Adding sig1 as indicator for tests that were significant in 1st stage of BKY
+posthoc_2$col_bri.y[!posthoc_2$sig_1]<-NA
+posthoc_2$BL_bri.y[!posthoc_2$sig_1]<-NA
+posthoc_2$BL_col.y[!posthoc_2$sig_1]<-NA
+#mlt_posthoc_2<-melt(posthoc_2,id.vars = c("Tissue","GVariable"),measure.vars = colnames(posthoc_2)[c(8:10,12:14)])
+mlt_posthoc_2coef<-melt(posthoc_2,id.vars = c("Tissue","GVariable"),measure.vars = colnames(posthoc_2)[c(8:10)])
+mlt_posthoc_2pval<-melt(posthoc_2,id.vars = c("Tissue","GVariable"),measure.vars = colnames(posthoc_2)[c(12:14)])
+mlt_posthoc_2coef$variable<-sub(".x","",mlt_posthoc_2coef$variable)
+mlt_posthoc_2pval$variable<-sub(".y","",mlt_posthoc_2pval$variable)
+mlt_posthoc_2<-merge(mlt_posthoc_2coef,mlt_posthoc_2pval,by=c("Tissue","GVariable","variable"))
+#mlt_posthoc_2$padj<-p.adjust(mlt_posthoc_2$value.y)
+mlt_posthoc_2$padj<-mlt_posthoc_2$value.y
+mlt_posthoc_2$sig<-mlt_posthoc_2$padj<0.1*(sum(plantType_Anova$padj<0.1)/length(plantType_Anova$padj))
+mlt_posthoc_2$sig[is.na(mlt_posthoc_2$sig)]<-F
+mlt_posthoc_2$sig<-mlt_posthoc_2$sig*1
+mlt_posthoc_2$GVariable[mlt_posthoc_2$GVariable=="Anisotropy"]<-"anisotropy"
+
+```
+
+
+#Pairwise comparisons by contrast
+
+```{r - summary tiles by contrast, echo=FALSE}
+sumarry_variance_treatment<-sumarry_variance_prop[sumarry_variance_prop$variable=="Treatment",]
+colnames(sumarry_variance_treatment)[1]<-"GVariable"
+sumarry_variance_treatment$Tissue<-sub("cortex",replacement = "Cortex",x = sumarry_variance_treatment$Tissue)
+sumarry_variance_treatment$Tissue<-sub("endo",replacement = "Endo",x = sumarry_variance_treatment$Tissue)
+sumarry_variance_treatment$Tissue<-sub("pericycle",replacement = "Pericycle",x = sumarry_variance_treatment$Tissue)
+
+mrg_posthoc_varprop<-merge(mlt_posthoc_2,sumarry_variance_treatment,by=c("Tissue","GVariable"))
+#mrg_posthoc_varprop$sig[mrg_posthoc_varprop$sig==0]<-0.3
+mrg_posthoc_varprop$clr=sign(mrg_posthoc_varprop$value.x)*mrg_posthoc_varprop$sig*(sqrt(mrg_posthoc_varprop$value))
+mrg_posthoc_varprop$clr[mrg_posthoc_varprop$clr==0]<-sign(mrg_posthoc_varprop$value.x[mrg_posthoc_varprop$clr==0])*0.5
+mrg_posthoc_varprop$clr1=sign(mrg_posthoc_varprop$value.x)*mrg_posthoc_varprop$sig*(mrg_posthoc_varprop$value)
+mrg_posthoc_varprop$clr1[mrg_posthoc_varprop$clr1==0]<-sign(mrg_posthoc_varprop$value.x[mrg_posthoc_varprop$clr1==0])*0.5
+
+
+# ggplot(mrg_posthoc_varprop,aes(GVariable,paste(variable.x,Tissue,sep="  //  "),fill=clr))+
+#   geom_tile(color="black")+
+#   labs(title = "BL vs Col")+
+#   theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())+
+#   scale_fill_gradient2(limits=c(-6.2,6.2),
+#                        breaks=seq(-6,6,2),
+#                        labels=sign(seq(-6,6,2))*(seq(-6,6,2)^2))+
+#   xlab(label = "Variable")+
+#   ylab(label = "Comparision")
+tile_scale_sqrt<-ggplot( mrg_posthoc_varprop ) +
+  geom_tile( aes( x = GVariable, y = Tissue, fill = clr )  ) +
+  scale_fill_gradient2(limits=c(-8,8),
+                       breaks=seq(-8,8,2),
+                       labels=seq(-60,60,15)) +
+  geom_point( aes( x = GVariable, y = Tissue, alpha= as.numeric(sig) ) ,color="gray50")+
+  scale_alpha_continuous(range=c(0,1),breaks=c(0,1),labels=c("No","Yes"))+
+  xlab(label = "Geometric Variable")+
+  ylab(label = "Tissue")+
+  scale_y_discrete(limits=rev(c("EpiN",
+                                "EpiH",
+                                "Cortex",
+                                "Endo",
+                                "Pericycle")))+
+  scale_x_discrete(limits=c("depth","length","width","surface","volume","anisotropy"))+
+  facet_grid(variable.x ~ ., scales = "free_y")+
+  labs(fill = "% explained", alpha="Significant")
+#ggsave(tile_scale_sqrt,filename="tile_scale_sqrt1_June2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+tile_scale_sqrt
+
+```
+
+```{r echo=FALSE}
+mrg_posthoc_varprop$clr2<-mrg_posthoc_varprop$clr1
+#mrg_posthoc_varprop$clr2[mrg_posthoc_varprop$clr2>10]<-10
+tile_no_scale<-ggplot( mrg_posthoc_varprop ) +
+  geom_tile( aes( x = GVariable, y = Tissue, fill = clr2 )  ) +
+  scale_fill_gradient2(limits=c(-55,55),
+                       breaks=seq(-55,55,5),
+                       labels=sign(seq(-55,55,5))*(abs(seq(-55,55,5)))) +
+  geom_point( aes( x = GVariable, y = Tissue, alpha= as.numeric(sig) ) ,color="gray50")+
+  scale_alpha_continuous(range=c(0,1),breaks=c(0,1),labels=c("No","Yes"))+
+  xlab(label = "Geometric Variable")+
+  ylab(label = "Tissue")+
+  scale_y_discrete(limits=rev(c("EpiN",
+                                "EpiH",
+                                "Cortex",
+                                "Endo",
+                                "Pericycle")))+
+  scale_x_discrete(limits=c("depth","length","width","surface","volume","anisotropy"))+
+  facet_grid(variable.x ~ ., scales = "free_y")+
+  labs(fill = "% explained", alpha="Significant")
+#ggsave(tile_no_scale,filename="tile_no_scale1_June2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+#tile_no_scale
+```
+
+
+

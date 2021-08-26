@@ -1,0 +1,332 @@
+---
+title: "Variance_Proportions"
+author: "Guy Horev"
+date: "7 6 2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### variance proportions
+
+## Cortex
+
+```{r - proportions of variance, echo=FALSE}
+cortex_sumarry_variance<-
+  rbind(as.data.frame(get_variance(cortexLMElength)),
+        as.data.frame(get_variance(cortexLMEdepth)),
+        as.data.frame(get_variance(cortexLMEwidth)),
+        as.data.frame(get_variance(cortexLMEvolume)),
+        as.data.frame(get_variance(cortexLMEsurface)),
+        as.data.frame(get_variance(cortexLMEAnisotropy))
+  )
+rownames(cortex_sumarry_variance)<-c("length","depth","width","volume","surface","anisotropy")
+cortex_sumarry_variance_prop<-cortex_sumarry_variance[,c(1:3)]/rowSums(cortex_sumarry_variance[,c(1:3)])
+cortex_sumarry_variance_prop<-round(cortex_sumarry_variance_prop*100)
+colnames(cortex_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(cortexLMElength)$`Sum Sq`[1]/sum(anova(cortexLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(cortexLMElength)$`Sum Sq`[2]/sum(anova(cortexLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(cortexLMEdepth)$`Sum Sq`[1]/sum(anova(cortexLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(cortexLMEdepth)$`Sum Sq`[2]/sum(anova(cortexLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(cortexLMEwidth)$`Sum Sq`[1]/sum(anova(cortexLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(cortexLMEwidth)$`Sum Sq`[2]/sum(anova(cortexLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(cortexLMEvolume)$`Sum Sq`[1]/sum(anova(cortexLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(cortexLMEvolume)$`Sum Sq`[2]/sum(anova(cortexLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(cortexLMEsurface)$`Sum Sq`[1]/sum(anova(cortexLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(cortexLMEsurface)$`Sum Sq`[2]/sum(anova(cortexLMEsurface)$`Sum Sq`)
+
+anisotropyTreatmentProp<-anova(cortexLMEAnisotropy)$`Sum Sq`[1]/sum(anova(cortexLMEAnisotropy)$`Sum Sq`)
+anisotropyDistanceProp<-anova(cortexLMEAnisotropy)$`Sum Sq`[2]/sum(anova(cortexLMEAnisotropy)$`Sum Sq`)
+
+
+#cortex_sumarry_variance_prop$Random<-cortex_sumarry_variance_prop$Cumulative-cortex_sumarry_variance_prop$Distance
+#cortex_sumarry_variance_prop<-cortex_sumarry_variance_prop[,-2]
+
+cortex_sumarry_variance_prop$Treatment<-NA
+cortex_sumarry_variance_prop$Treatment[1]<-cortex_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+cortex_sumarry_variance_prop$Treatment[2]<-cortex_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+cortex_sumarry_variance_prop$Treatment[3]<-cortex_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+cortex_sumarry_variance_prop$Treatment[4]<-cortex_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+cortex_sumarry_variance_prop$Treatment[5]<-cortex_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+cortex_sumarry_variance_prop$Treatment[6]<-cortex_sumarry_variance_prop$Fixed[6]*anisotropyTreatmentProp
+
+cortex_sumarry_variance_prop$Distance<-NA
+cortex_sumarry_variance_prop$Distance[1]<-cortex_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+cortex_sumarry_variance_prop$Distance[2]<-cortex_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+cortex_sumarry_variance_prop$Distance[3]<-cortex_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+cortex_sumarry_variance_prop$Distance[4]<-cortex_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+cortex_sumarry_variance_prop$Distance[5]<-cortex_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+cortex_sumarry_variance_prop$Distance[6]<-cortex_sumarry_variance_prop$Fixed[6]*anisotropyDistanceProp
+
+cortex_sumarry_variance_prop$id=rownames(cortex_sumarry_variance_prop)
+cortex_sumarry_variance_prop<-cortex_sumarry_variance_prop[,-1]
+colnames(cortex_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+cortex_sumarry_variance_prop<-data.table::melt(cortex_sumarry_variance_prop,id.vars="id")
+cortex_variance_stacked<-ggplot(cortex_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+cortex_variance_stacked
+
+```
+
+## Endodermis
+
+```{r - proportions of variance, echo=FALSE}
+endo_sumarry_variance<-
+  rbind(as.data.frame(get_variance(endoLMElength)),
+        as.data.frame(get_variance(endoLMEdepth)),
+        as.data.frame(get_variance(endoLMEwidth)),
+        as.data.frame(get_variance(endoLMEvolume)),
+        as.data.frame(get_variance(endoLMEsurface)),
+        as.data.frame(get_variance(endoLMEAnisotropy))
+  )
+rownames(endo_sumarry_variance)<-c("length","depth","width","volume","surface","anisotropy")
+endo_sumarry_variance_prop<-endo_sumarry_variance[,c(1:3)]/rowSums(endo_sumarry_variance[,c(1:3)])
+endo_sumarry_variance_prop<-round(endo_sumarry_variance_prop*100)
+colnames(endo_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(endoLMElength)$`Sum Sq`[1]/sum(anova(endoLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(endoLMElength)$`Sum Sq`[2]/sum(anova(endoLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(endoLMEdepth)$`Sum Sq`[1]/sum(anova(endoLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(endoLMEdepth)$`Sum Sq`[2]/sum(anova(endoLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(endoLMEwidth)$`Sum Sq`[1]/sum(anova(endoLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(endoLMEwidth)$`Sum Sq`[2]/sum(anova(endoLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(endoLMEvolume)$`Sum Sq`[1]/sum(anova(endoLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(endoLMEvolume)$`Sum Sq`[2]/sum(anova(endoLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(endoLMEsurface)$`Sum Sq`[1]/sum(anova(endoLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(endoLMEsurface)$`Sum Sq`[2]/sum(anova(endoLMEsurface)$`Sum Sq`)
+
+anisotropyTreatmentProp<-anova(endoLMEAnisotropy)$`Sum Sq`[1]/sum(anova(endoLMEAnisotropy)$`Sum Sq`)
+anisotropyDistanceProp<-anova(endoLMEAnisotropy)$`Sum Sq`[2]/sum(anova(endoLMEAnisotropy)$`Sum Sq`)
+
+
+#endo_sumarry_variance_prop$Random<-endo_sumarry_variance_prop$Cumulative-endo_sumarry_variance_prop$Distance
+#endo_sumarry_variance_prop<-endo_sumarry_variance_prop[,-2]
+
+endo_sumarry_variance_prop$Treatment<-NA
+endo_sumarry_variance_prop$Treatment[1]<-endo_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+endo_sumarry_variance_prop$Treatment[2]<-endo_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+endo_sumarry_variance_prop$Treatment[3]<-endo_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+endo_sumarry_variance_prop$Treatment[4]<-endo_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+endo_sumarry_variance_prop$Treatment[5]<-endo_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+endo_sumarry_variance_prop$Treatment[6]<-endo_sumarry_variance_prop$Fixed[6]*anisotropyTreatmentProp
+
+endo_sumarry_variance_prop$Distance<-NA
+endo_sumarry_variance_prop$Distance[1]<-endo_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+endo_sumarry_variance_prop$Distance[2]<-endo_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+endo_sumarry_variance_prop$Distance[3]<-endo_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+endo_sumarry_variance_prop$Distance[4]<-endo_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+endo_sumarry_variance_prop$Distance[5]<-endo_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+endo_sumarry_variance_prop$Distance[6]<-endo_sumarry_variance_prop$Fixed[6]*anisotropyDistanceProp
+
+endo_sumarry_variance_prop$id=rownames(endo_sumarry_variance_prop)
+endo_sumarry_variance_prop<-endo_sumarry_variance_prop[,-1]
+colnames(endo_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+endo_sumarry_variance_prop<-data.table::melt(endo_sumarry_variance_prop,id.vars="id")
+endo_variance_stacked<-ggplot(endo_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+endo_variance_stacked
+
+```
+
+## Pericycle
+
+```{r - proportions of variance, echo=FALSE}
+pericycle_sumarry_variance<-
+  rbind(as.data.frame(get_variance(pericycleLMElength)),
+        as.data.frame(get_variance(pericycleLMEdepth)),
+        as.data.frame(get_variance(pericycleLMEwidth)),
+        as.data.frame(get_variance(pericycleLMEvolume)),
+        as.data.frame(get_variance(pericycleLMEsurface)),
+        as.data.frame(get_variance(pericycleLMEAnisotropy))
+  )
+rownames(pericycle_sumarry_variance)<-c("length","depth","width","volume","surface","anisotropy")
+pericycle_sumarry_variance_prop<-pericycle_sumarry_variance[,c(1:3)]/rowSums(pericycle_sumarry_variance[,c(1:3)])
+pericycle_sumarry_variance_prop<-round(pericycle_sumarry_variance_prop*100)
+colnames(pericycle_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(pericycleLMElength)$`Sum Sq`[1]/sum(anova(pericycleLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(pericycleLMElength)$`Sum Sq`[2]/sum(anova(pericycleLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(pericycleLMEdepth)$`Sum Sq`[1]/sum(anova(pericycleLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(pericycleLMEdepth)$`Sum Sq`[2]/sum(anova(pericycleLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(pericycleLMEwidth)$`Sum Sq`[1]/sum(anova(pericycleLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(pericycleLMEwidth)$`Sum Sq`[2]/sum(anova(pericycleLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(pericycleLMEvolume)$`Sum Sq`[1]/sum(anova(pericycleLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(pericycleLMEvolume)$`Sum Sq`[2]/sum(anova(pericycleLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(pericycleLMEsurface)$`Sum Sq`[1]/sum(anova(pericycleLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(pericycleLMEsurface)$`Sum Sq`[2]/sum(anova(pericycleLMEsurface)$`Sum Sq`)
+
+anisotropyTreatmentProp<-anova(pericycleLMEAnisotropy)$`Sum Sq`[1]/sum(anova(pericycleLMEAnisotropy)$`Sum Sq`)
+anisotropyDistanceProp<-anova(pericycleLMEAnisotropy)$`Sum Sq`[2]/sum(anova(pericycleLMEAnisotropy)$`Sum Sq`)
+
+
+#pericycle_sumarry_variance_prop$Random<-pericycle_sumarry_variance_prop$Cumulative-pericycle_sumarry_variance_prop$Distance
+#pericycle_sumarry_variance_prop<-pericycle_sumarry_variance_prop[,-2]
+
+pericycle_sumarry_variance_prop$Treatment<-NA
+pericycle_sumarry_variance_prop$Treatment[1]<-pericycle_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+pericycle_sumarry_variance_prop$Treatment[2]<-pericycle_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+pericycle_sumarry_variance_prop$Treatment[3]<-pericycle_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+pericycle_sumarry_variance_prop$Treatment[4]<-pericycle_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+pericycle_sumarry_variance_prop$Treatment[5]<-pericycle_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+pericycle_sumarry_variance_prop$Treatment[6]<-pericycle_sumarry_variance_prop$Fixed[6]*anisotropyTreatmentProp
+
+pericycle_sumarry_variance_prop$Distance<-NA
+pericycle_sumarry_variance_prop$Distance[1]<-pericycle_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+pericycle_sumarry_variance_prop$Distance[2]<-pericycle_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+pericycle_sumarry_variance_prop$Distance[3]<-pericycle_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+pericycle_sumarry_variance_prop$Distance[4]<-pericycle_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+pericycle_sumarry_variance_prop$Distance[5]<-pericycle_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+pericycle_sumarry_variance_prop$Distance[6]<-pericycle_sumarry_variance_prop$Fixed[6]*anisotropyDistanceProp
+
+pericycle_sumarry_variance_prop$id=rownames(pericycle_sumarry_variance_prop)
+pericycle_sumarry_variance_prop<-pericycle_sumarry_variance_prop[,-1]
+colnames(pericycle_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+pericycle_sumarry_variance_prop<-data.table::melt(pericycle_sumarry_variance_prop,id.vars="id")
+pericycle_variance_stacked<-ggplot(pericycle_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+pericycle_variance_stacked
+
+```
+
+## Epidermis  hair cells
+
+```{r - proportions of variance, echo=FALSE}
+EpiH_sumarry_variance<-
+  rbind(as.data.frame(get_variance(EpiHLMElength)),
+        as.data.frame(get_variance(EpiHLMEdepth)),
+        as.data.frame(get_variance(EpiHLMEwidth)),
+        as.data.frame(get_variance(EpiHLMEvolume)),
+        as.data.frame(get_variance(EpiHLMEsurface)),
+        as.data.frame(get_variance(EpiHLMEAnisotropy))
+  )
+rownames(EpiH_sumarry_variance)<-c("length","depth","width","volume","surface","anisotropy")
+EpiH_sumarry_variance_prop<-EpiH_sumarry_variance[,c(1:3)]/rowSums(EpiH_sumarry_variance[,c(1:3)])
+EpiH_sumarry_variance_prop<-round(EpiH_sumarry_variance_prop*100)
+colnames(EpiH_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(EpiHLMElength)$`Sum Sq`[1]/sum(anova(EpiHLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(EpiHLMElength)$`Sum Sq`[2]/sum(anova(EpiHLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(EpiHLMEdepth)$`Sum Sq`[1]/sum(anova(EpiHLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(EpiHLMEdepth)$`Sum Sq`[2]/sum(anova(EpiHLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(EpiHLMEwidth)$`Sum Sq`[1]/sum(anova(EpiHLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(EpiHLMEwidth)$`Sum Sq`[2]/sum(anova(EpiHLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(EpiHLMEvolume)$`Sum Sq`[1]/sum(anova(EpiHLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(EpiHLMEvolume)$`Sum Sq`[2]/sum(anova(EpiHLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(EpiHLMEsurface)$`Sum Sq`[1]/sum(anova(EpiHLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(EpiHLMEsurface)$`Sum Sq`[2]/sum(anova(EpiHLMEsurface)$`Sum Sq`)
+
+anisotropyTreatmentProp<-anova(EpiHLMEAnisotropy)$`Sum Sq`[1]/sum(anova(EpiHLMEAnisotropy)$`Sum Sq`)
+anisotropyDistanceProp<-anova(EpiHLMEAnisotropy)$`Sum Sq`[2]/sum(anova(EpiHLMEAnisotropy)$`Sum Sq`)
+
+
+#EpiH_sumarry_variance_prop$Random<-EpiH_sumarry_variance_prop$Cumulative-EpiH_sumarry_variance_prop$Distance
+#EpiH_sumarry_variance_prop<-EpiH_sumarry_variance_prop[,-2]
+
+EpiH_sumarry_variance_prop$Treatment<-NA
+EpiH_sumarry_variance_prop$Treatment[1]<-EpiH_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+EpiH_sumarry_variance_prop$Treatment[2]<-EpiH_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+EpiH_sumarry_variance_prop$Treatment[3]<-EpiH_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+EpiH_sumarry_variance_prop$Treatment[4]<-EpiH_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+EpiH_sumarry_variance_prop$Treatment[5]<-EpiH_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+EpiH_sumarry_variance_prop$Treatment[6]<-EpiH_sumarry_variance_prop$Fixed[6]*anisotropyTreatmentProp
+
+EpiH_sumarry_variance_prop$Distance<-NA
+EpiH_sumarry_variance_prop$Distance[1]<-EpiH_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+EpiH_sumarry_variance_prop$Distance[2]<-EpiH_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+EpiH_sumarry_variance_prop$Distance[3]<-EpiH_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+EpiH_sumarry_variance_prop$Distance[4]<-EpiH_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+EpiH_sumarry_variance_prop$Distance[5]<-EpiH_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+EpiH_sumarry_variance_prop$Distance[6]<-EpiH_sumarry_variance_prop$Fixed[6]*anisotropyDistanceProp
+
+EpiH_sumarry_variance_prop$id=rownames(EpiH_sumarry_variance_prop)
+EpiH_sumarry_variance_prop<-EpiH_sumarry_variance_prop[,-1]
+colnames(EpiH_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+EpiH_sumarry_variance_prop<-data.table::melt(EpiH_sumarry_variance_prop,id.vars="id")
+EpiH_variance_stacked<-ggplot(EpiH_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+EpiH_variance_stacked
+
+```
+
+## Epidermis non hair cells
+
+```{r - proportions of variance, echo=FALSE}
+EpiN_sumarry_variance<-
+  rbind(as.data.frame(get_variance(EpiNLMElength)),
+        as.data.frame(get_variance(EpiNLMEdepth)),
+        as.data.frame(get_variance(EpiNLMEwidth)),
+        as.data.frame(get_variance(EpiNLMEvolume)),
+        as.data.frame(get_variance(EpiNLMEsurface)),
+        as.data.frame(get_variance(EpiNLMEAnisotropy))
+  )
+rownames(EpiN_sumarry_variance)<-c("length","depth","width","volume","surface","anisotropy")
+EpiN_sumarry_variance_prop<-EpiN_sumarry_variance[,c(1:3)]/rowSums(EpiN_sumarry_variance[,c(1:3)])
+EpiN_sumarry_variance_prop<-round(EpiN_sumarry_variance_prop*100)
+colnames(EpiN_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(EpiNLMElength)$`Sum Sq`[1]/sum(anova(EpiNLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(EpiNLMElength)$`Sum Sq`[2]/sum(anova(EpiNLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(EpiNLMEdepth)$`Sum Sq`[1]/sum(anova(EpiNLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(EpiNLMEdepth)$`Sum Sq`[2]/sum(anova(EpiNLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(EpiNLMEwidth)$`Sum Sq`[1]/sum(anova(EpiNLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(EpiNLMEwidth)$`Sum Sq`[2]/sum(anova(EpiNLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(EpiNLMEvolume)$`Sum Sq`[1]/sum(anova(EpiNLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(EpiNLMEvolume)$`Sum Sq`[2]/sum(anova(EpiNLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(EpiNLMEsurface)$`Sum Sq`[1]/sum(anova(EpiNLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(EpiNLMEsurface)$`Sum Sq`[2]/sum(anova(EpiNLMEsurface)$`Sum Sq`)
+
+anisotropyTreatmentProp<-anova(EpiNLMEAnisotropy)$`Sum Sq`[1]/sum(anova(EpiNLMEAnisotropy)$`Sum Sq`)
+anisotropyDistanceProp<-anova(EpiNLMEAnisotropy)$`Sum Sq`[2]/sum(anova(EpiNLMEAnisotropy)$`Sum Sq`)
+
+
+#EpiN_sumarry_variance_prop$Random<-EpiN_sumarry_variance_prop$Cumulative-EpiN_sumarry_variance_prop$Distance
+#EpiN_sumarry_variance_prop<-EpiN_sumarry_variance_prop[,-2]
+
+EpiN_sumarry_variance_prop$Treatment<-NA
+EpiN_sumarry_variance_prop$Treatment[1]<-EpiN_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[2]<-EpiN_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[3]<-EpiN_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[4]<-EpiN_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[5]<-EpiN_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+EpiN_sumarry_variance_prop$Treatment[6]<-EpiN_sumarry_variance_prop$Fixed[6]*anisotropyTreatmentProp
+
+EpiN_sumarry_variance_prop$Distance<-NA
+EpiN_sumarry_variance_prop$Distance[1]<-EpiN_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+EpiN_sumarry_variance_prop$Distance[2]<-EpiN_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+EpiN_sumarry_variance_prop$Distance[3]<-EpiN_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+EpiN_sumarry_variance_prop$Distance[4]<-EpiN_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+EpiN_sumarry_variance_prop$Distance[5]<-EpiN_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+EpiN_sumarry_variance_prop$Distance[6]<-EpiN_sumarry_variance_prop$Fixed[6]*anisotropyDistanceProp
+
+EpiN_sumarry_variance_prop$id=rownames(EpiN_sumarry_variance_prop)
+EpiN_sumarry_variance_prop<-EpiN_sumarry_variance_prop[,-1]
+colnames(EpiN_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+EpiN_sumarry_variance_prop<-data.table::melt(EpiN_sumarry_variance_prop,id.vars="id")
+EpiN_variance_stacked<-ggplot(EpiN_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+EpiN_variance_stacked
+
+```

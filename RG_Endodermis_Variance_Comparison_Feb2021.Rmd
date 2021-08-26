@@ -1,0 +1,574 @@
+---
+title: "Endodermis"
+author: "Guy Horev"
+date: "7 2 2021"
+output: html_document
+---
+
+  
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(xlsx)
+library(ggplot2)
+library(pheatmap)
+library(mixtools)
+library(mclust)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(lmerTest)
+library(lme4)
+library(RColorBrewer)
+library(nlme)
+library(multcomp)
+library(MASS)
+library(lattice)
+library(EMAtools)
+library(sjstats)
+library(performance)
+library(insight)
+```
+
+```{r - data, include=FALSE}
+## Reading endo data
+endo<-read.csv("./Endodermis.csv",stringsAsFactors = F)
+## Rmoving one plant with problematic quantification
+endo<-endo[!endo$PlantID=="20171217__col 0.1 nM BL_A",]
+endo<-endo[!endo$PlantID=="Col_20170717",]
+endo<-endo[!endo$PlantID=="Bri1_20170802_07",]
+endo<-endo[!endo$PlantID=="Bri1_20170817",]
+
+# Changing plant ID for consistency with other IDs
+endo$PlantID[endo$PlantID=="20171217__col 0.1 nM BL_B"]<-"Col_BL20171217__col.0.1.nM.BL_B"
+endo$PlantType[endo$PlantType=="col_BL"]<-"colBL"
+endo$PlantType[endo$PlantType=="bri1-116"]<-"bri"
+
+
+
+endo_ColBL1<-read.xlsx("./col_BL_1_updated_20200423.xlsx",sheetName = "Endodermis",stringsAsFactors = F)
+endo_ColBL1<-endo_ColBL1[,c(1:7,9,8)]
+endo_ColBL2<-read.xlsx("./col_BL_2_updated_20200423.xlsx",sheetName = "Endodermis",stringsAsFactors = F)
+endo_ColBL2<-endo_ColBL2[,c(1:7,9,8)]
+#
+
+#Adding Cell ID (X column) correcting colmn order and names
+endo_ColBL1$X<-paste(endo_ColBL1$plant.ID,endo_ColBL1$Cell.ID,sep = "_")
+endo_ColBL1$PlantType<-"colBL"
+endo_ColBL1<-endo_ColBL1[,c(10,11,2,3,4,5,6,7,9,8)]
+colnames(endo_ColBL1)<-colnames(endo)
+
+endo_ColBL2$X<-paste(endo_ColBL2$plant.ID,endo_ColBL2$Cell.ID,sep = "_")
+endo_ColBL2$PlantType<-"colBL"
+endo_ColBL2<-endo_ColBL2[,c(10,11,2,3,4,5,6,7,9,8)]
+colnames(endo_ColBL2)<-colnames(endo)
+
+endo_col_20191029_03<-read.xlsx("./col_20191029_03_new.xlsx",sheetName = "Endodermis",stringsAsFactors = F)
+endo_col_20191029_03$X<-paste(endo_col_20191029_03$plant.ID,endo_col_20191029_03$Cell.ID,sep = "_")
+endo_col_20191029_03$PlantType<-"col"
+endo_col_20191029_03<-endo_col_20191029_03[,c(10,11,2:7,8,9)]
+colnames(endo_col_20191029_03)<-colnames(endo)
+
+endo_bri1_20170328_02<-read.xlsx("./bri1_20170328_02_updated.xlsx",sheetName = "Endodermis",stringsAsFactors = F)
+endo_bri1_20170328_02$X<-paste(endo_bri1_20170328_02$plant.ID,endo_bri1_20170328_02$Cell.ID,sep = "_")
+endo_bri1_20170328_02$PlantType<-"bri"
+endo_bri1_20170328_02<-endo_bri1_20170328_02[,c(10,11,2:7,8,9)]
+colnames(endo_bri1_20170328_02)<-colnames(endo)
+
+
+endo1<-rbind(endo,endo_ColBL1,endo_ColBL2,endo_col_20191029_03,endo_bri1_20170328_02)
+endo1<-endo1[is.finite(endo1$length),]
+endo1<-endo1[endo1$length>1,]
+endo_cells_ready2hm<-endo1
+endo_cells_ready2hm[,c(6,7,8,9,10)]<-log2(endo_cells_ready2hm[,c(6,7,8,9,10)])
+#Removing unnecessary data frames
+rm("endo","endo_bri1_20170328_02","endo_col_20191029_03","endo_ColBL2","endo_ColBL1")
+```
+
+#mixture models with EM algorithm - Separating meristem from elongation zone
+```{r - lableling meristem cells, echo=FALSE, message=FALSE, warning=FALSE}
+#histograms + em algorithm
+plot_mix_comps <- function(x, mu, sigma, lam) {
+  lam * dnorm(x, mu, sigma)
+}
+endo_cells_ready2hm$ProbeMeristem<-0
+##All
+
+len_col <- endo_cells_ready2hm$length[endo_cells_ready2hm$PlantType=="col"]
+len_Bri <- endo_cells_ready2hm$length[endo_cells_ready2hm$PlantType=="bri"]
+len_colBL <- endo_cells_ready2hm$length[endo_cells_ready2hm$PlantType=="colBL"]
+
+set.seed(2)
+mixmdl <- normalmixEM2comp(len_col, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl$mu)
+hstem<-data.frame(x = mixmdl$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl$mu[rdr[1]], mixmdl$sigma[rdr[1]], lam = mixmdl$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl$mu[rdr[2]], mixmdl$sigma[rdr[2]], lam = mixmdl$lambda[rdr[2]]),
+                colour = "red", lwd = 1) +
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "col")
+
+for_scatter<- data.frame(Distance=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="col",5],
+                         Length=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="col",6],
+                         PlantType=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="col",2],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+for_scatter$PlantType<-gsub("col","black",for_scatter$PlantType)
+
+
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("black"))),color = guide_legend(override.aes = list(shape =c(1))))
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_endo_col_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_endo_col_MM,filename="grid_endo_col_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+##Bri
+
+set.seed(2)
+mixmdl_bri <- normalmixEM2comp(len_Bri, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl_bri$mu)
+hstem<-data.frame(x = mixmdl_bri$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_bri$mu[rdr[1]], mixmdl_bri$sigma[rdr[1]], lam = mixmdl_bri$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_bri$mu[rdr[2]], mixmdl_bri$sigma[rdr[2]], lam = mixmdl_bri$lambda[rdr[2]]),
+                colour = "red", lwd = 1)+
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "Bri1")
+for_scatter<- data.frame(Distance=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="bri",5],
+                         Length=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="bri",6],
+                         PlantType=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="bri",1],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl_bri$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+
+for_scatter$PlantType<-gsub("bri","yellow",for_scatter$PlantType)
+#for_scatter$PlantType<-c("black","yellow")[1+as.numeric(for_scatter$PlantType=="bri")]
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("yellow"))),color = guide_legend(override.aes = list(shape =c(1))))
+
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_endo_Bri1_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_endo_Bri1_MM,filename="grid_endo_Bri1_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+##colBL
+
+set.seed(1)
+mixmdl_colBL <- normalmixEM2comp(len_colBL, , sigsqrd = c(1,1),mu=c(-1,1),lambda = 0.5)
+rdr<-order(mixmdl_colBL$mu)
+hstem<-data.frame(x = mixmdl_colBL$x) %>%
+  ggplot() +
+  geom_histogram(aes(x, ..density..), binwidth = 0.2, colour = "gray50", 
+                 fill = "pink") +
+  #geom_density(aes(x, ..density..), bw=0.2, colour = "black",lwd = 1.5)+
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_colBL$mu[rdr[1]], mixmdl_colBL$sigma[rdr[1]], lam = mixmdl_colBL$lambda[rdr[1]]),
+                colour = "blue", lwd = 1) +
+  stat_function(geom = "line", fun = plot_mix_comps,
+                args = list(mixmdl_colBL$mu[rdr[2]], mixmdl_colBL$sigma[rdr[2]], lam = mixmdl_colBL$lambda[rdr[2]]),
+                colour = "red", lwd = 1) +
+  ylab("Density")+
+  xlab("Length")+
+  labs(title = "colBL")
+
+for_scatter<- data.frame(Distance=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="colBL",5],
+                         Length=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="colBL",6],
+                         PlantType=endo_cells_ready2hm[endo_cells_ready2hm$PlantType=="colBL",1],
+                         ProbMeristem=c("red","blue")[1+as.numeric(mixmdl_colBL$posterior[,rdr[1]]>0.8)],
+                         shape=21)
+
+for_scatter$PlantType<-gsub("colBL","yellow",for_scatter$PlantType)
+#for_scatter$PlantType<-c("black","yellow")[1+as.numeric(for_scatter$PlantType=="colBL")]
+scem<-ggplot(for_scatter, aes(x = Distance, y = Length, color = ProbMeristem,shape=shape)) + 
+  geom_point(size=2,stroke=1)+
+  scale_color_identity(guide = "legend",labels=c("Meristem","Mature"))+ 
+  scale_shape_identity()+
+  
+  guides(fill = guide_legend(override.aes = list(color =c("yellow"))),color = guide_legend(override.aes = list(shape =c(1))))
+
+grid.arrange(hstem, scem,ncol = 1)
+
+grid_endo_colBL_MM<-arrangeGrob(hstem, scem,ncol = 1)
+ggsave(grid_endo_colBL_MM,filename="grid_endo_colBL_MM_Feb2021.eps",height = 12,width = 14,units = "cm",device=cairo_ps)
+
+endo_cells_ready2hm$ProbeMeristem[endo_cells_ready2hm$PlantType=="col"]<-mixmdl$posterior[,order(mixmdl$mu)[1]]
+endo_cells_ready2hm$ProbeMeristem[endo_cells_ready2hm$PlantType=="bri"]<-mixmdl_bri$posterior[,order(mixmdl_bri$mu)[1]]
+endo_cells_ready2hm$ProbeMeristem[endo_cells_ready2hm$PlantType=="colBL"]<-mixmdl_colBL$posterior[,order(mixmdl_colBL$mu)[1]]
+
+```
+
+# Data transformation
+## Distance from QC
+
+```{r - distance transformation, echo=FALSE}
+endo_meristem_cells<-endo1
+endo_meristem_cells$ProbeMeristem<-endo_cells_ready2hm$ProbeMeristem
+endo_meristem_cells<-endo_meristem_cells[endo_cells_ready2hm$ProbeMeristem>0.8,]
+```
+
+### No transformation
+
+```{r - distance no trnasformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$distance_from.QC,20)
+plot(aov(distance_from.QC~PlantType,data=endo_meristem_cells))
+```
+
+### Square root transformation
+
+```{r - distance sqrt transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(endo_meristem_cells$distance_from.QC),20)
+plot(aov(sqrt(distance_from.QC)~PlantType,data=endo_meristem_cells))
+```
+
+## Length
+
+### No Transformation
+
+```{r - length no transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$length,20)
+plot(aov(length~PlantType,data=endo_meristem_cells))
+```
+
+### Log2 Transformation
+
+```{r - length log2 transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(endo_meristem_cells$length),20)
+plot(aov(log2(length)~PlantType,data=endo_meristem_cells))
+```
+
+## Width
+
+### No Transformation
+
+```{r - width No transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$width,20)
+plot(aov(width~PlantType,data=endo_meristem_cells))
+
+```
+
+### Square Transformation
+
+```{r - width square transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$width^2,20)
+plot(aov(width^2~PlantType,data=endo_meristem_cells))
+```
+
+### Square root Transformation
+
+```{r -, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(endo_meristem_cells$width),20)
+plot(aov(width^.5~PlantType,data=endo_meristem_cells))
+```
+
+## Depth
+### No Transformation
+
+```{r - depth transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$depth,20)
+plot(aov(depth~PlantType,data=endo_meristem_cells))
+```
+
+### Log2 transformation
+
+```{r - depth Log2 transformation, echo=FALSE}
+par(mfrow=c(2,3))
+hist(log2(endo_meristem_cells$depth),20)
+plot(aov(log2(1+depth)~PlantType,data=endo_meristem_cells))
+```
+
+## Volume
+
+### No transformation
+```{r - volume no transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$volume,20)
+plot(aov(volume~PlantType,data=endo_meristem_cells))
+```
+
+### Cubic root
+
+```{r - volume cubic root, echo=FALSE}
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$volume^(1/3),20)
+plot(aov(volume^(1/3)~PlantType,data=endo_meristem_cells))
+```
+
+### Log2
+
+```{r - volume  log2}
+par(mfrow=c(2,3))
+hist(log2(endo_meristem_cells$volume),20)
+plot(aov(log2(volume)~PlantType,data=endo_meristem_cells))
+
+```
+
+## Surface
+### No transformation
+
+```{r - surface no transformation, echo=FALSE}
+
+par(mfrow=c(2,3))
+hist(endo_meristem_cells$surface,20)
+plot(aov(surface~PlantType,data=endo_meristem_cells))
+```
+
+### Square root
+
+```{r - surface sqrt, echo=FALSE}
+par(mfrow=c(2,3))
+hist(sqrt(endo_meristem_cells$surface),20)
+plot(aov(sqrt(surface)~PlantType,data=endo_meristem_cells))
+```
+
+### Log2
+
+```{r - surface log2, echo=FALSE}
+par(mfrow=c(2,3))
+hist(log2(endo_meristem_cells$surface),20)
+plot(aov(log2(surface)~PlantType,data=endo_meristem_cells))
+```
+
+
+## Transformations decissions
+### Distance from QC - square root
+### length - log2
+### depth - 1+log2
+### width - No
+## volume - Cubic Root
+## surfce - Square Root
+
+##Boxplots
+
+### transformed data
+```{r boxplots-treatments, echo=FALSE, message=FALSE, warning=FALSE}
+endo_meristem_cells_No_transformation<-endo_meristem_cells
+write.csv(endo_meristem_cells_No_transformation,"endo_meristem_cells_No_transformation.csv",row.names = F)
+endo_meristem_cells$distance_from.QC<-sqrt(endo_meristem_cells$distance_from.QC)
+endo_meristem_cells$length<-log2(endo_meristem_cells$length)
+endo_meristem_cells$depth<-log2(1+endo_meristem_cells$depth)
+#endo_meristem_cells$volume<-log2(endo_meristem_cells$volume)
+#endo_meristem_cells$surface<-log2(endo_meristem_cells$surface)
+endo_meristem_cells$volume<-endo_meristem_cells$volume^(1/3)
+endo_meristem_cells$surface<-sqrt(endo_meristem_cells$surface)
+
+#Boxplots
+dst<-ggplot(endo_meristem_cells,aes(y=distance_from.QC,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("distance_from_QC.tiff")
+lngt<-ggplot(endo_meristem_cells,aes(y=length,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("length.tiff")
+dpt<-ggplot(endo_meristem_cells,aes(y=depth,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("depth.tiff")
+wdt<-ggplot(endo_meristem_cells,aes(y=width,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("width.tiff")
+vlm<-ggplot(endo_meristem_cells,aes(y=volume,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("volume.tiff")
+sa<-ggplot(endo_meristem_cells,aes(y=surface,x=PlantType,col=PlantType))+geom_boxplot()+ theme(axis.text.x = element_blank(),axis.ticks.x = element_blank())
+#ggsave("volume.tiff")
+
+
+grid.arrange(dst, lngt, dpt,wdt,vlm,sa,ncol = 2)
+
+```
+
+
+
+## Htpothesis testing
+
+### Distance from QC
+```{r hypothesis testing for distance, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+endo_cells_ready2anova<-endo_meristem_cells
+endo_cells_ready2anova$PlantType<-as.factor(endo_cells_ready2anova$PlantType)
+
+endoPQL <- lme(fixed=distance_from.QC ~ PlantType ,
+                 random= ~1 | PlantID,
+                 data = endo_cells_ready2anova,
+                 method = "ML")
+summary(endoPQL)$tTable
+endoTKdist=summary(glht(endoPQL,linfct=mcp(PlantType="Tukey")))
+endoTKdist
+```
+
+### Length
+
+```{r hypothesis testing for length, echo=FALSE, message=FALSE, warning=FALSE}
+print("Length")
+
+endoLMElength <- lmer(length ~ PlantType+distance_from.QC+
+                          (1 | PlantID),
+                        data = endo_cells_ready2anova,
+                        REML=TRUE)
+summary(endoLMElength)
+#summary(PQLlength)$tTable
+
+
+endoTKlength=summary(glht(endoLMElength,linfct=mcp(PlantType="Tukey")))
+endoTKlength
+
+```
+
+### Width
+
+```{r hypothesis testing for width, echo=FALSE, message=FALSE, warning=FALSE}
+print("width")
+
+endoLMEwidth <- lmer(width ~ PlantType+distance_from.QC+
+                         (1 | PlantID),
+                       data = endo_cells_ready2anova,
+                       REML=TRUE)
+
+summary(endoLMEwidth)
+
+#summary(PQLwidth)$tTable
+endoTKwidth=summary(glht(endoLMEwidth,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+endoTKwidth
+```
+
+### Depth
+
+```{r hypothesis testing for depth, echo=FALSE, message=FALSE, warning=FALSE}
+print("depth")
+
+endoLMEdepth <- lmer(depth ~ PlantType+distance_from.QC+
+                         (1 | PlantID),
+                       data = endo_cells_ready2anova,
+                       REML=TRUE)
+
+summary(endoLMEdepth)
+#summary(PQLdepth)$tTable
+endoTKdepth=summary(glht(endoLMEdepth,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+endoTKdepth
+
+```
+
+### Volume
+
+```{r hypothesis testing for volume, echo=FALSE, message=FALSE, warning=FALSE}
+print("volume")
+
+endoLMEvolume <- lmer(volume ~ PlantType+distance_from.QC+
+                          (1 | PlantID),
+                        data = endo_cells_ready2anova,
+                        REML=TRUE)
+
+summary(endoLMEvolume)
+#summary(PQLvolume)$tTable
+endoTKvolume=summary(glht(endoLMEvolume,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+endoTKvolume
+
+```
+
+### Surface
+
+```{r hypothesis testing for surface, echo=FALSE, message=FALSE, warning=FALSE}
+print("surface")
+
+endoLMEsurface <- lmer(surface ~ PlantType+distance_from.QC+
+                           (1 | PlantID),
+                         data = endo_cells_ready2anova,
+                         REML = T)
+
+summary(endoLMEsurface)
+#summary(PQLsurface)$tTable
+endoTKsurface=summary(glht(endoLMEsurface,linfct=mcp(PlantType="Tukey"),alternative="two.sided"))
+endoTKsurface
+```
+
+### variance proportions
+
+```{r - proportions of variance, echo=FALSE}
+endo_sumarry_variance<-
+  rbind(as.data.frame(get_variance(endoLMElength)),
+        as.data.frame(get_variance(endoLMEdepth)),
+        as.data.frame(get_variance(endoLMEwidth)),
+        as.data.frame(get_variance(endoLMEvolume)),
+        as.data.frame(get_variance(endoLMEsurface))
+  )
+rownames(endo_sumarry_variance)<-c("length","depth","width","volume","surface")
+endo_sumarry_variance_prop<-endo_sumarry_variance[,c(1:3)]/rowSums(endo_sumarry_variance[,c(1:3)])
+endo_sumarry_variance_prop<-round(endo_sumarry_variance_prop*100)
+colnames(endo_sumarry_variance_prop)<-c("Fixed","Random","Residual")
+
+lengthTreatmentProp<-anova(endoLMElength)$`Sum Sq`[1]/sum(anova(endoLMElength)$`Sum Sq`)
+lengthDistanceProp<-anova(endoLMElength)$`Sum Sq`[2]/sum(anova(endoLMElength)$`Sum Sq`)
+
+depthTreatmentProp<-anova(endoLMEdepth)$`Sum Sq`[1]/sum(anova(endoLMEdepth)$`Sum Sq`)
+depthDistanceProp<-anova(endoLMEdepth)$`Sum Sq`[2]/sum(anova(endoLMEdepth)$`Sum Sq`)
+
+widthTreatmentProp<-anova(endoLMEwidth)$`Sum Sq`[1]/sum(anova(endoLMEwidth)$`Sum Sq`)
+widthDistanceProp<-anova(endoLMEwidth)$`Sum Sq`[2]/sum(anova(endoLMEwidth)$`Sum Sq`)
+
+volumeTreatmentProp<-anova(endoLMEvolume)$`Sum Sq`[1]/sum(anova(endoLMEvolume)$`Sum Sq`)
+volumeDistanceProp<-anova(endoLMEvolume)$`Sum Sq`[2]/sum(anova(endoLMEvolume)$`Sum Sq`)
+
+surfaceTreatmentProp<-anova(endoLMEsurface)$`Sum Sq`[1]/sum(anova(endoLMEsurface)$`Sum Sq`)
+surfaceDistanceProp<-anova(endoLMEsurface)$`Sum Sq`[2]/sum(anova(endoLMEsurface)$`Sum Sq`)
+
+
+#endo_sumarry_variance_prop$Random<-endo_sumarry_variance_prop$Cumulative-endo_sumarry_variance_prop$Distance
+#endo_sumarry_variance_prop<-endo_sumarry_variance_prop[,-2]
+
+endo_sumarry_variance_prop$Treatment<-NA
+endo_sumarry_variance_prop$Treatment[1]<-endo_sumarry_variance_prop$Fixed[1]*lengthTreatmentProp
+endo_sumarry_variance_prop$Treatment[2]<-endo_sumarry_variance_prop$Fixed[2]*depthTreatmentProp
+endo_sumarry_variance_prop$Treatment[3]<-endo_sumarry_variance_prop$Fixed[3]*widthTreatmentProp
+endo_sumarry_variance_prop$Treatment[4]<-endo_sumarry_variance_prop$Fixed[4]*volumeTreatmentProp
+endo_sumarry_variance_prop$Treatment[5]<-endo_sumarry_variance_prop$Fixed[5]*surfaceTreatmentProp
+
+
+endo_sumarry_variance_prop$Distance<-NA
+endo_sumarry_variance_prop$Distance[1]<-endo_sumarry_variance_prop$Fixed[1]*lengthDistanceProp
+endo_sumarry_variance_prop$Distance[2]<-endo_sumarry_variance_prop$Fixed[2]*depthDistanceProp
+endo_sumarry_variance_prop$Distance[3]<-endo_sumarry_variance_prop$Fixed[3]*widthDistanceProp
+endo_sumarry_variance_prop$Distance[4]<-endo_sumarry_variance_prop$Fixed[4]*volumeDistanceProp
+endo_sumarry_variance_prop$Distance[5]<-endo_sumarry_variance_prop$Fixed[5]*surfaceDistanceProp
+
+endo_sumarry_variance_prop$id=rownames(endo_sumarry_variance_prop)
+endo_sumarry_variance_prop<-endo_sumarry_variance_prop[,-1]
+colnames(endo_sumarry_variance_prop)[1:2]<-c("Plant","Residual")
+
+endo_sumarry_variance_prop<-data.table::melt(endo_sumarry_variance_prop,id.vars="id")
+endo_variance_stacked<-ggplot(endo_sumarry_variance_prop,aes(x=id,y=value,fill=variable))+geom_bar(position="stack", stat="identity")
+endo_variance_stacked
+
+```
+
+
+```{r}
+sessionInfo()
+```
